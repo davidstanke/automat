@@ -166,7 +166,7 @@ async def branch_init_node(ctx: Any, node_input: Any) -> AsyncIterator[PipelineE
     github_token = payload.get("github_token")
     create_pr = payload.get("create_pr", True)
 
-    clean_path_str = raw_spec_path.strip().strip("`").strip("'").strip('"')
+    clean_path_str = raw_spec_path.strip().strip("`").strip("'").strip('"').lstrip("/")
 
     workspace_dir = None
 

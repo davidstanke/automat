@@ -78,21 +78,25 @@ jobs:
           echo "Target Branch: ${BRANCH}"
 
       - name: Invoke Implementer Agent Service
+        env:
+          ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+          SERVICE_URL: ${{ vars.IMPLEMENTER_SERVICE_URL }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          SPEC_PATH: ${{ steps.params.outputs.spec_path }}
+          BRANCH: ${{ steps.params.outputs.branch }}
+          CREATE_PR: ${{ steps.params.outputs.create_pr }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "${{ steps.params.outputs.spec_path }}" ]; then
+          if [ -z "$SPEC_PATH" ]; then
             echo "Error: No specification path provided or detected."
             exit 1
           fi
 
-          ID_TOKEN="${{ steps.auth.outputs.id_token }}"
-          SERVICE_URL="${{ vars.IMPLEMENTER_SERVICE_URL }}"
-          REPO_URL="${{ github.server_url }}/${{ github.repository }}.git"
-
           echo "============================================================"
           echo " Invoking Implementer Agent on Cloud Run"
           echo " Service URL: ${SERVICE_URL}"
-          echo " Spec Path:   ${{ steps.params.outputs.spec_path }}"
-          echo " Branch:      ${{ steps.params.outputs.branch }}"
+          echo " Spec Path:   ${SPEC_PATH}"
+          echo " Branch:      ${BRANCH}"
           echo "============================================================"
 
           python3 - << 'PYEOF'
@@ -102,17 +106,25 @@ jobs:
           import urllib.request
           import urllib.error
 
-          url = f"${SERVICE_URL}".rstrip("/") + "/tasks"
+          service_url = os.environ.get("SERVICE_URL", "").rstrip("/")
+          id_token = os.environ.get("ID_TOKEN", "")
+          spec_path = os.environ.get("SPEC_PATH", "")
+          repo_url = os.environ.get("REPO_URL", "")
+          branch = os.environ.get("BRANCH", "")
+          github_token = os.environ.get("GITHUB_TOKEN", "")
+          create_pr = os.environ.get("CREATE_PR", "true").lower() == "true"
+
+          url = f"{service_url}/tasks"
           payload = {
-              "spec_path": "${{ steps.params.outputs.spec_path }}",
-              "repo_url": "${REPO_URL}",
-              "branch": "${{ steps.params.outputs.branch }}",
-              "github_token": "${{ secrets.GITHUB_TOKEN }}",
-              "create_pr": ${{ steps.params.outputs.create_pr }},
+              "spec_path": spec_path,
+              "repo_url": repo_url,
+              "branch": branch,
+              "github_token": github_token,
+              "create_pr": create_pr,
           }
 
           headers = {
-              "Authorization": f"Bearer ${ID_TOKEN}",
+              "Authorization": f"Bearer {id_token}",
               "Content-Type": "application/json",
               "Accept": "text/event-stream",
           }
@@ -137,3 +149,4 @@ jobs:
               print(f"Error invoking service: {e}", file=sys.stderr)
               sys.exit(1)
           PYEOF
+

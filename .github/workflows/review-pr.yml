@@ -52,16 +52,17 @@ jobs:
           echo "Target PR Number: #${PR_NUM}"
 
       - name: Invoke Reviewer Agent Service
+        env:
+          ID_TOKEN: ${{ steps.auth.outputs.id_token }}
+          SERVICE_URL: ${{ vars.REVIEWER_SERVICE_URL }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          PR_NUMBER: ${{ steps.params.outputs.pr_number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ID_TOKEN="${{ steps.auth.outputs.id_token }}"
-          SERVICE_URL="${{ vars.REVIEWER_SERVICE_URL }}"
-          REPO_URL="${{ github.server_url }}/${{ github.repository }}.git"
-          PR_NUM="${{ steps.params.outputs.pr_number }}"
-
           echo "============================================================"
           echo " Invoking Reviewer Agent Council on Cloud Run"
           echo " Service URL: ${SERVICE_URL}"
-          echo " PR Number:   #${PR_NUM}"
+          echo " PR Number:   #${PR_NUMBER}"
           echo " Repo URL:    ${REPO_URL}"
           echo "============================================================"
 
@@ -72,15 +73,22 @@ jobs:
           import urllib.request
           import urllib.error
 
-          url = f"${SERVICE_URL}".rstrip("/") + "/tasks"
+          service_url = os.environ.get("SERVICE_URL", "").rstrip("/")
+          id_token = os.environ.get("ID_TOKEN", "")
+          repo_url = os.environ.get("REPO_URL", "")
+          pr_num_str = os.environ.get("PR_NUMBER", "")
+          pr_number = int(pr_num_str) if pr_num_str.isdigit() else pr_num_str
+          github_token = os.environ.get("GITHUB_TOKEN", "")
+
+          url = f"{service_url}/tasks"
           payload = {
-              "pr_number": int("${PR_NUM}") if "${PR_NUM}".isdigit() else "${PR_NUM}",
-              "repo_url": "${REPO_URL}",
-              "github_token": "${{ secrets.GITHUB_TOKEN }}",
+              "pr_number": pr_number,
+              "repo_url": repo_url,
+              "github_token": github_token,
           }
 
           headers = {
-              "Authorization": f"Bearer ${ID_TOKEN}",
+              "Authorization": f"Bearer {id_token}",
               "Content-Type": "application/json",
               "Accept": "text/event-stream",
           }
