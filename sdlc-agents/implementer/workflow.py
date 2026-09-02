@@ -19,10 +19,11 @@ if str(pkg_dir) not in sys.path:
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-try:
-    os.chdir(repo_root)
-except Exception:
-    pass
+if (repo_root / ".git").exists() or (repo_root / "sdlc-agents").exists():
+    try:
+        os.chdir(repo_root)
+    except Exception:
+        pass
 
 from google.antigravity.hooks import post_tool_call
 

@@ -1,0 +1,107 @@
+name: Review Pull Request
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request Number to review (e.g. 1)'
+        required: true
+        type: string
+
+jobs:
+  review-pr:
+    name: Run Reviewer Agent Council
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud via WIF
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          id_token_audience: ${{ vars.REVIEWER_SERVICE_URL }}
+          id_token_include_email: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine PR Number
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUM="${{ inputs.pr_number }}"
+          else
+            PR_NUM="${{ github.event.pull_request.number }}"
+          fi
+          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "Target PR Number: #${PR_NUM}"
+
+      - name: Invoke Reviewer Agent Service
+        run: |
+          ID_TOKEN="${{ steps.auth.outputs.id_token }}"
+          SERVICE_URL="${{ vars.REVIEWER_SERVICE_URL }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}.git"
+          PR_NUM="${{ steps.params.outputs.pr_number }}"
+
+          echo "============================================================"
+          echo " Invoking Reviewer Agent Council on Cloud Run"
+          echo " Service URL: ${SERVICE_URL}"
+          echo " PR Number:   #${PR_NUM}"
+          echo " Repo URL:    ${REPO_URL}"
+          echo "============================================================"
+
+          python3 - << 'PYEOF'
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          url = f"${SERVICE_URL}".rstrip("/") + "/tasks"
+          payload = {
+              "pr_number": int("${PR_NUM}") if "${PR_NUM}".isdigit() else "${PR_NUM}",
+              "repo_url": "${REPO_URL}",
+              "github_token": "${{ secrets.GITHUB_TOKEN }}",
+          }
+
+          headers = {
+              "Authorization": f"Bearer ${ID_TOKEN}",
+              "Content-Type": "application/json",
+              "Accept": "text/event-stream",
+          }
+
+          req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+
+          try:
+              with urllib.request.urlopen(req, timeout=3600) as resp:
+                  for raw_line in resp:
+                      line = raw_line.decode("utf-8", errors="replace")
+                      if line.startswith("data: "):
+                          print(line[6:], end="", flush=True)
+                      elif line.startswith("data:"):
+                          print(line[5:], end="", flush=True)
+                      elif line.strip() and not line.startswith(":"):
+                          print(line, end="", flush=True)
+          except urllib.error.HTTPError as e:
+              err_msg = e.read().decode("utf-8", errors="replace")
+              print(f"HTTP Error {e.code}: {err_msg}", file=sys.stderr)
+              sys.exit(1)
+          except Exception as e:
+              print(f"Error invoking service: {e}", file=sys.stderr)
+              sys.exit(1)
+          PYEOF

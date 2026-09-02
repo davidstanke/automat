@@ -1,0 +1,139 @@
+name: Implement Feature Spec
+
+on:
+  push:
+    paths:
+      - 'docs/specs/*.md'
+      - '!docs/specs/_implemented/**'
+      - 'specs/**/spec.md'
+    branches:
+      - 'feature/**'
+  workflow_dispatch:
+    inputs:
+      spec_path:
+        description: 'Path to specification file or directory (e.g., docs/specs/my-feature.md or specs/my-feature)'
+        required: true
+        type: string
+      branch:
+        description: 'Target feature branch (defaults to current branch)'
+        required: false
+        type: string
+      create_pr:
+        description: 'Whether to automatically open a Pull Request upon completion'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  implement-spec:
+    name: Run Implementer Agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Authenticate to Google Cloud via WIF
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+          id_token_audience: ${{ vars.IMPLEMENTER_SERVICE_URL }}
+          id_token_include_email: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine Spec Path and Branch
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SPEC_PATH="${{ inputs.spec_path }}"
+            BRANCH="${{ inputs.branch }}"
+            CREATE_PR="${{ inputs.create_pr }}"
+          else
+            # Find modified/added spec from git diff
+            SPEC_PATH=$(git diff --name-only HEAD~1 HEAD | grep -E '^docs/specs/.*\.md|^specs/.*/spec\.md' | head -n 1 || echo "")
+            BRANCH="${GITHUB_REF_NAME}"
+            CREATE_PR="true"
+          fi
+
+          if [ -z "$BRANCH" ]; then
+            BRANCH="${GITHUB_REF_NAME}"
+          fi
+
+          echo "spec_path=${SPEC_PATH}" >> "$GITHUB_OUTPUT"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "create_pr=${CREATE_PR}" >> "$GITHUB_OUTPUT"
+          echo "Target Spec: ${SPEC_PATH}"
+          echo "Target Branch: ${BRANCH}"
+
+      - name: Invoke Implementer Agent Service
+        run: |
+          if [ -z "${{ steps.params.outputs.spec_path }}" ]; then
+            echo "Error: No specification path provided or detected."
+            exit 1
+          fi
+
+          ID_TOKEN="${{ steps.auth.outputs.id_token }}"
+          SERVICE_URL="${{ vars.IMPLEMENTER_SERVICE_URL }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}.git"
+
+          echo "============================================================"
+          echo " Invoking Implementer Agent on Cloud Run"
+          echo " Service URL: ${SERVICE_URL}"
+          echo " Spec Path:   ${{ steps.params.outputs.spec_path }}"
+          echo " Branch:      ${{ steps.params.outputs.branch }}"
+          echo "============================================================"
+
+          python3 - << 'PYEOF'
+          import json
+          import os
+          import sys
+          import urllib.request
+          import urllib.error
+
+          url = f"${SERVICE_URL}".rstrip("/") + "/tasks"
+          payload = {
+              "spec_path": "${{ steps.params.outputs.spec_path }}",
+              "repo_url": "${REPO_URL}",
+              "branch": "${{ steps.params.outputs.branch }}",
+              "github_token": "${{ secrets.GITHUB_TOKEN }}",
+              "create_pr": ${{ steps.params.outputs.create_pr }},
+          }
+
+          headers = {
+              "Authorization": f"Bearer ${ID_TOKEN}",
+              "Content-Type": "application/json",
+              "Accept": "text/event-stream",
+          }
+
+          req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+
+          try:
+              with urllib.request.urlopen(req, timeout=3600) as resp:
+                  for raw_line in resp:
+                      line = raw_line.decode("utf-8", errors="replace")
+                      if line.startswith("data: "):
+                          print(line[6:], end="", flush=True)
+                      elif line.startswith("data:"):
+                          print(line[5:], end="", flush=True)
+                      elif line.strip() and not line.startswith(":"):
+                          print(line, end="", flush=True)
+          except urllib.error.HTTPError as e:
+              err_msg = e.read().decode("utf-8", errors="replace")
+              print(f"HTTP Error {e.code}: {err_msg}", file=sys.stderr)
+              sys.exit(1)
+          except Exception as e:
+              print(f"Error invoking service: {e}", file=sys.stderr)
+              sys.exit(1)
+          PYEOF

@@ -11,10 +11,17 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 # Ensure repo root and package path in sys.path
-repo_root = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(repo_root))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-os.chdir(repo_root)
+current_dir = Path(__file__).resolve().parent
+repo_root = current_dir.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+if (repo_root / ".git").exists() or (repo_root / "sdlc-agents").exists():
+    try:
+        os.chdir(repo_root)
+    except Exception:
+        pass
 
 load_dotenv()
 
