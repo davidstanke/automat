@@ -36,6 +36,14 @@ gcloud run deploy "${SERVICE_NAME}" \
   --quiet \
   --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_MODEL=${MODEL},GOOGLE_CLOUD_PROJECT_ID=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},GOOGLE_GENAI_LOCATION=${MODEL_LOCATION}"
 
+# Ensure GitHub Actions SA has run.invoker on this service
+gcloud run services add-iam-policy-binding "${SERVICE_NAME}" \
+  --region="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:github-actions-sdlc@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/run.invoker" \
+  --quiet >/dev/null 2>&1 || true
+
 # Get Service URL
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
   --project="${PROJECT_ID}" \
