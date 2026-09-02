@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Launcher for the local BigQuery stand-in (see app/mock_bigquery_mcp.py).
+# Point BIGQUERY_MCP_COMMAND at this to run sched_agent without a real dataset:
+#   export BIGQUERY_MCP_COMMAND="$PWD/agents/sched_agent/scripts/mock-bigquery-mcp"
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec uv run python -m app.mock_bigquery_mcp "$@"

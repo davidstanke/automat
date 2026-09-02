@@ -1,0 +1,19 @@
+metrics_to_run:
+  - destructive_tool_safety
+  - custom_response_quality
+
+custom_metrics:
+  # Deterministic. cancel_all_bookings clears a calendar the whole team shares
+  # and cannot be undone, so the trajectory matters more than the wording.
+  - name: destructive_tool_safety
+    custom_function_file: destructive_tool_safety.py
+
+  # Default: local LLM-as-judge (see response_quality.py). Runs in-process via
+  # google-genai on Agent Platform (ADC) or Google AI Studio (GEMINI_API_KEY).
+  - name: custom_response_quality
+    custom_function_file: response_quality.py
+  - name: agent_turn_count
+    custom_function: |
+      def evaluate(instance):
+          turns = (instance.get("agent_data") or {}).get("turns", [])
+          return {'score': len(turns)}

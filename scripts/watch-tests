@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Re-run an agent's unit tests whenever its source or tests change.
+#
+#   ./scripts/watch-tests                 # luncher_agent (default)
+#   ./scripts/watch-tests sched_agent
+#   ./scripts/watch-tests luncher_agent tests/unit/test_proposal_builder.py
+#
+# Uses watchfiles' CLI, which is a declared dependency of each agent, so there is
+# nothing extra to install. Watches only app/ and tests/ -- pointing it at the
+# agent root would walk .venv (~15k files).
+set -euo pipefail
+
+AGENT="${1:-luncher_agent}"
+TARGET="${2:-tests/unit}"
+AGENT_DIR="$(cd "$(dirname "$0")/.." && pwd)/agents/${AGENT}"
+
+if [[ ! -d "$AGENT_DIR" ]]; then
+  echo "No such agent: ${AGENT}" >&2
+  echo "Expected one of: $(cd "$(dirname "$0")/../agents" && ls -d */ | tr -d '/' | tr '\n' ' ')" >&2
+  exit 1
+fi
+
+cd "$AGENT_DIR"
+echo "Watching ${AGENT}: app/ tests/  ->  pytest ${TARGET}"
+exec uv run watchfiles "uv run pytest ${TARGET} -q" app tests

@@ -1,0 +1,5 @@
+{
+  "name": "eval-viewer",
+  "description": "Sidecar server and dashboard skill for viewing ADK agent evaluation reports and metrics",
+  "version": "1.0.0"
+}

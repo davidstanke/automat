@@ -1,0 +1,122 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "basic_lunch",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Plan a team lunch for next week that aligns with our corporate strategy."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A lunch proposal naming a strategic objective, listing every attendee, offering time slots and the food reminder note."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "no_common_slot",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Book a team lunch this week. Liam is out Monday and Tuesday, Maya is out Wednesday and Thursday, and Diego is only free Friday morning. Pick the best option."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "No slot suits everyone, so the proposal should still offer concrete slots, recommend one, and be honest about who cannot attend rather than claiming full availability."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "single_slot",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "The only time the team is free is Friday 12:00-13:00. Set the lunch up for then."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A proposal with exactly one time slot offered and recommended; the proposal must format correctly with a single option."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "slot_change_followup",
+      "agent_data": {
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "text": "Plan a team lunch for next week aligned with the OmniChef launch."
+                    }
+                  ]
+                }
+              },
+              {
+                "author": "agent",
+                "content": {
+                  "role": "model",
+                  "parts": [
+                    {
+                      "text": "I've proposed an OmniChef alignment lunch, recommending Tuesday at 12:00."
+                    }
+                  ]
+                }
+              },
+              {
+                "author": "user",
+                "content": {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "text": "Tuesday doesn't work for me. Can we do Wednesday instead?"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A re-rendered proposal recommending Wednesday, still offering the other slots, and preserving the strategic framing."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

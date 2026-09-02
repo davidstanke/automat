@@ -1,0 +1,5 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "agent-factory",
+  "description": "Multi-Agent Spec-Driven Planning Engine: Council-Refined Specifications and Dynamic Swarm Task Decomposition."
+}

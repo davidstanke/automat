@@ -1,0 +1,18 @@
+# Docker does not read .gitignore, so anything excluded from version control
+# still ships in the image unless it is listed here.
+
+# Hundreds of MB uploaded to the builder and then discarded -- `uv sync`
+# rebuilds dependencies inside the image.
+.venv/
+__pycache__/
+*.pyc
+
+# Not needed at runtime. README.md is NOT excluded -- the Dockerfile copies it
+# and pyproject.toml declares `readme = "README.md"`, so the build fails without.
+tests/
+.pytest_cache/
+GEMINI.md
+
+# Superseded by Memory Bank. Excluded so a stale local file cannot ship as
+# starting state if one is ever recreated.
+app/data/booked_meetings.json

@@ -1,0 +1,17 @@
+# Graders for traces captured over A2A (`05-run-evals.sh luncher --a2a`).
+# The executor withholds every author but the synthesizer there, so what
+# reaches the caller differs from the ADK REST response eval_config.yaml grades.
+
+metrics_to_run:
+  - single_voice
+  - custom_response_quality
+
+custom_metrics:
+  # Deterministic. Each author's answer arrives as its own text part, so more
+  # than one means a gatherer reached the caller.
+  - name: single_voice
+    custom_function_file: single_voice.py
+
+  # Local LLM-as-judge
+  - name: custom_response_quality
+    custom_function_file: response_quality.py

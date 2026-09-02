@@ -1,0 +1,5 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "product-owner",
+  "description": "Multi-Agent Spec-Driven Authoring & Council Review Engine: Grounded, Validated Specifications."
+}

@@ -1,0 +1,1 @@
+This folder contains assets representing the fictional company where Luncher is used. The fictional company is called GeniCo and is a manufacturer of appliances and electronics.

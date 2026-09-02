@@ -1,0 +1,27 @@
+metrics_to_run:
+  - tool_trajectory
+  - custom_response_quality
+
+custom_metrics:
+  # Deterministic. The synthesizer must call format_lunch_proposal exactly once.
+  - name: tool_trajectory
+    custom_function_file: tool_trajectory.py
+
+  # Deterministic, and absent from metrics_to_run above. It grades the A2A
+  # delivery, where the executor withholds every author but the synthesizer;
+  # `eval generate --url` drives the ADK REST path instead, on which all four
+  # agents legitimately speak and the score is 0 however well the agent behaves.
+  # Add it back when grading traces captured over A2A.
+  - name: single_voice
+    custom_function_file: single_voice.py
+
+  # Default: local LLM-as-judge (see response_quality.py). Runs in-process via
+  # google-genai on Agent Platform (ADC) or Google AI Studio (GEMINI_API_KEY).
+  - name: custom_response_quality
+    custom_function_file: response_quality.py
+
+  - name: agent_turn_count
+    custom_function: |
+      def evaluate(instance):
+          turns = (instance.get("agent_data") or {}).get("turns", [])
+          return {'score': len(turns)}

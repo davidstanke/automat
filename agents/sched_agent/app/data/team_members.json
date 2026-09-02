@@ -1,0 +1,194 @@
+[
+  {
+    "name": "Liam",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "09:00-12:00",
+        "14:00-17:00"
+      ],
+      "Tuesday": [
+        "10:00-12:00",
+        "13:00-15:00"
+      ],
+      "Wednesday": [
+        "09:00-12:00"
+      ],
+      "Thursday": [
+        "10:00-12:00",
+        "13:00-15:00"
+      ],
+      "Friday": [
+        "09:00-13:00"
+      ]
+    }
+  },
+  {
+    "name": "Diego",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "10:00-12:00",
+        "15:00-16:00"
+      ],
+      "Tuesday": [
+        "09:00-10:00",
+        "13:00-14:00"
+      ],
+      "Wednesday": [
+        "11:00-12:00",
+        "14:00-15:00"
+      ],
+      "Thursday": [
+        "11:00-12:00",
+        "13:00-14:00"
+      ],
+      "Friday": [
+        "11:00-13:00"
+      ]
+    }
+  },
+  {
+    "name": "Dan",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "11:00-13:00",
+        "15:00-16:00"
+      ],
+      "Tuesday": [
+        "13:00-16:00"
+      ],
+      "Wednesday": [
+        "10:00-12:00",
+        "14:00-16:00"
+      ],
+      "Thursday": [
+        "09:00-11:00",
+        "13:00-14:00"
+      ],
+      "Friday": [
+        "12:00-14:00"
+      ]
+    }
+  },
+  {
+    "name": "Maya",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "09:30-12:00",
+        "14:00-16:30"
+      ],
+      "Tuesday": [
+        "11:00-12:00",
+        "13:00-14:00"
+      ],
+      "Wednesday": [
+        "11:00-13:00"
+      ],
+      "Thursday": [
+        "11:00-13:00"
+      ],
+      "Friday": [
+        "10:00-13:00"
+      ]
+    }
+  },
+  {
+    "name": "Aaliyah",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "12:00-15:00"
+      ],
+      "Tuesday": [
+        "09:00-11:00",
+        "13:00-14:00"
+      ],
+      "Wednesday": [
+        "10:00-11:00",
+        "13:00-14:00"
+      ],
+      "Thursday": [
+        "10:00-11:00",
+        "13:00-14:00"
+      ],
+      "Friday": [
+        "12:00-15:00"
+      ]
+    }
+  },
+  {
+    "name": "Naomi",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "10:00-11:00",
+        "13:00-14:00"
+      ],
+      "Tuesday": [
+        "10:00-12:00",
+        "13:00-14:00"
+      ],
+      "Wednesday": [
+        "09:00-11:00",
+        "15:00-17:00"
+      ],
+      "Thursday": [
+        "13:00-15:00"
+      ],
+      "Friday": [
+        "12:00-13:00"
+      ]
+    }
+  },
+  {
+    "name": "Jordan",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "13:00-15:00"
+      ],
+      "Tuesday": [
+        "13:00-15:00"
+      ],
+      "Wednesday": [
+        "11:00-12:00",
+        "13:00-15:00"
+      ],
+      "Thursday": [
+        "09:00-11:00",
+        "13:00-14:00"
+      ],
+      "Friday": [
+        "11:00-14:00"
+      ]
+    }
+  },
+  {
+    "name": "Kai",
+    "timezone": "America/New_York",
+    "weekly_availability": {
+      "Monday": [
+        "09:00-10:00",
+        "13:00-14:00"
+      ],
+      "Tuesday": [
+        "10:00-12:00",
+        "14:00-15:00"
+      ],
+      "Wednesday": [
+        "12:00-13:00",
+        "15:00-16:00"
+      ],
+      "Thursday": [
+        "11:00-13:00"
+      ],
+      "Friday": [
+        "10:00-11:00",
+        "12:00-13:00"
+      ]
+    }
+  }
+]

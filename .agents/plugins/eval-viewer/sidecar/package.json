@@ -1,0 +1,14 @@
+{
+  "name": "eval-viewer-sidecar",
+  "version": "1.0.0",
+  "description": "Node.js Express sidecar server to browse and view HTML evaluation reports for ADK agents",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

@@ -1,0 +1,4 @@
+google-genai
+reportlab
+matplotlib
+python-dotenv

@@ -1,0 +1,187 @@
+# ==============================================================================
+# Local Environment & Secrets
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*-key.json
+credentials*.json
+token.json
+client_secret*.json
+service_account*.json
+
+# ==============================================================================
+# Google ADK (Agent Development Kit) & agents-cli
+# ==============================================================================
+.adk/
+.adk
+.google-agents-cli/
+.agents-cli-scripts/
+deployment_metadata.json
+booked_meetings.json
+*.booked_meetings.json
+.persist_vector_store
+.saved_chats/
+.saved_chats
+.locust_env
+tools/a2a-inspector/
+a2a_inspector/
+agents/*/artifacts/
+agent_artifacts/
+.eval_results/
+eval_results/
+eval_results*.json
+eval_reports/
+traces/
+tests/load_test/.results/*.html
+tests/load_test/.results/*.csv
+
+# ==============================================================================
+# Scratch, Working Notes & Database State
+# ==============================================================================
+.scratch/
+.scratch
+scratch/
+*.db
+*.sqlite3
+*.sqlite3-journal
+db.sqlite3
+sessions.db
+state.db
+
+# ==============================================================================
+# IDEs & Code Editors
+# ==============================================================================
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+# JetBrains (PyCharm, IntelliJ IDEA, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Cursor & AI Editors
+.cursor/
+.cursorindexing/
+
+# Sublime Text, Eclipse, Vim, Emacs & Others
+.project
+.classpath
+.settings/
+.c9/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+.*.sw[a-p]
+\#*\#
+.\#*
+
+# ==============================================================================
+# Python & Packaging
+# ==============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.python-version
+__pypackages__/
+
+# ==============================================================================
+# Virtual Environments
+# ==============================================================================
+.venv/
+.venv*
+venv/
+venv*/
+ENV/
+env/
+env*/
+env.bak/
+venv.bak/
+
+# ==============================================================================
+# Linters, Formatters & Type Checkers
+# ==============================================================================
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ty/
+.ropeproject
+.spyderproject
+.spyproject
+
+# ==============================================================================
+# Testing & Coverage
+# ==============================================================================
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+*.cover
+*.py,cover
+.cache/
+
+# ==============================================================================
+# Terraform & Infrastructure
+# ==============================================================================
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+*out.tfplan
+.terraform.lock.hcl
+my_env.tfvars
+
+# ==============================================================================
+# Node & Sidecar Dependencies
+# ==============================================================================
+node_modules/
+.npm/
+
+# ==============================================================================
+# Operating System Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+

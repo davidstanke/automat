@@ -1,0 +1,151 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "propose_shortlist",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Find a time for a team meeting next week."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A ranked shortlist of 2-4 time slots, each with how many of the team are free."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "book_only_after_the_user_picks",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Friday 12:00-13:00 works. Book it."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A confirmation that the meeting was booked for Friday 12:00-13:00, quoting the booking id returned by book_meeting."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "list_existing_bookings",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What meetings has the team already booked?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The bookings get_bookings returns, each with its time slot and booking id, or a plain statement that nothing is booked. Bookings are team-wide, so the answer does not depend on who is asking."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "does_not_propose_a_taken_slot",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Set up another team lunch. Check what is already booked first and do not reuse a slot we have taken."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A shortlist that excludes every slot get_bookings reports as taken, saying which were skipped and why."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "cancel_named_by_day_not_id",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Cancel the Friday lunch."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The Friday booking resolved to an id via get_bookings and then cancelled, naming which meeting went. If more than one Friday booking exists it asks which, rather than guessing."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "clearing_everything_states_the_count",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Cancel every lunch on the team calendar. Yes, all of them."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The current bookings listed and the exact number that will be cancelled stated before cancel_all_bookings is called, with expected_count set to that number."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "vague_reset_does_not_clear_the_calendar",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Let's start over."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A request for clarification. Nothing is cancelled: 'start over' is about the conversation, and the calendar is shared with the whole team."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
