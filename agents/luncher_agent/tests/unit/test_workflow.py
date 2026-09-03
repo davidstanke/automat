@@ -25,6 +25,7 @@ from app.agent import (
     IntentClassification,
     _extract_text_from_input,
     booking_handler,
+    classify_intent_fast_path,
     intent_router,
     luncher_agent,
     root_agent,
@@ -53,6 +54,30 @@ def test_intent_router_empty_input() -> None:
     asyncio.run(_run())
 
 
+def test_classify_intent_fast_path() -> None:
+    assert classify_intent_fast_path("") == "plan"
+    assert classify_intent_fast_path("Book slot 2 for the team lunch on Friday") == "book"
+    assert classify_intent_fast_path("Confirm Tuesday 12:00") == "book"
+    assert classify_intent_fast_path("I'll take slot 1") == "book"
+    assert classify_intent_fast_path("Plan a team lunch for next Friday") == "plan"
+    assert classify_intent_fast_path("Find available time slots") == "plan"
+    assert classify_intent_fast_path("What time slots are available?") == "plan"
+    # Ambiguous prompts fall back to LLM (return None)
+    assert classify_intent_fast_path("Maybe the afternoon?") is None
+
+
+def test_intent_router_fast_path() -> None:
+    async def _run():
+        ctx = MagicMock()
+        event_book = await intent_router._func(ctx, "Book slot 2 for the team lunch on Friday")
+        assert event_book.actions.route == "book"
+
+        event_plan = await intent_router._func(ctx, "Plan a team lunch for next Friday")
+        assert event_plan.actions.route == "plan"
+
+    asyncio.run(_run())
+
+
 def test_intent_router_llm_success() -> None:
     async def _run():
         ctx = MagicMock()
@@ -65,8 +90,10 @@ def test_intent_router_llm_success() -> None:
             mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
             mock_client_cls.return_value = mock_client
 
-            event = await intent_router._func(ctx, "Book Option 1 please")
+            # Ambiguous input to force LLM invocation
+            event = await intent_router._func(ctx, "Maybe the second option?")
             assert event.actions.route == "book"
+            assert mock_client.aio.models.generate_content.called
 
     asyncio.run(_run())
 
@@ -76,11 +103,16 @@ def test_intent_router_llm_fallback_booking_keyword() -> None:
         ctx = MagicMock()
         
         with patch("google.genai.Client", side_effect=Exception("API Error")):
+            # Fast path catches unambiguous booking/planning
             event = await intent_router._func(ctx, "Book Tuesday 12:00")
             assert event.actions.route == "book"
 
             event_plan = await intent_router._func(ctx, "Let's organize a lunch")
             assert event_plan.actions.route == "plan"
+
+            # Ambiguous input falls back to keyword analysis on error
+            event_ambig = await intent_router._func(ctx, "Please select the earlier slot")
+            assert event_ambig.actions.route == "book"
 
     asyncio.run(_run())
 

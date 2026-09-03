@@ -7,6 +7,7 @@ from app.tools import (
     get_team_members,
     book_meeting,
     get_bookings,
+    find_available_slots,
 )
 
 
@@ -48,3 +49,26 @@ def test_get_bookings_lists_what_was_booked() -> None:
     listed = asyncio.run(get_bookings())
     assert "Friday 12:00-13:00" in listed
     assert "Team lunch" in listed
+
+
+def test_find_available_slots_friday() -> None:
+    result = asyncio.run(find_available_slots("Friday"))
+    assert "## Team Roster" in result
+    assert "Team (8): Liam, Diego, Dan, Maya, Aaliyah, Naomi, Jordan, Kai" in result
+    assert "## Available Time Slots" in result
+    assert "Friday 12:00-13:00 (8 of 8 free)" in result
+
+
+def test_find_available_slots_excludes_booked() -> None:
+    asyncio.run(book_meeting("Friday 12:00-13:00", "Existing lunch"))
+    result = asyncio.run(find_available_slots("Friday"))
+    # Friday 12:00-13:00 should not be listed as an available slot
+    assert "Friday 12:00-13:00 (8 of 8 free)" not in result
+
+
+def test_find_available_slots_tuesday() -> None:
+    result = asyncio.run(find_available_slots("Tuesday"))
+    assert "## Team Roster" in result
+    assert "Team (8): Liam, Diego, Dan, Maya, Aaliyah, Naomi, Jordan, Kai" in result
+    assert "Tuesday 13:00-14:00 (7 of 8 free - Kai unavailable)" in result
+

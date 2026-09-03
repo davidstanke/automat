@@ -134,7 +134,7 @@ root_agent = Agent(
         "Rules for your output:\n"
         "1. Structure your output with clear Markdown headers, including '## Strategic Priorities & Key Initiatives' and '## Strategic Context'.\n"
         "2. Always explicitly highlight major active product launches and strategic projects (e.g., OmniChef Global Launch, VisionSphere).\n"
-        "3. Your summary must be clear, concise, and structured with bullet points.\n"
+        "3. Keep your summary concise, high-density, and structured with bullet points (under 200 words total). Avoid long discursive background paragraphs to enable fast downstream synthesis.\n"
         "4. Do not assume or hallucinate outside the contents of the provided documents.\n"
         "5. You must call the 'inspect_strategy_documents' tool first to retrieve the facts."
     ),

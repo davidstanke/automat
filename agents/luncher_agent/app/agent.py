@@ -14,6 +14,7 @@
 
 import logging
 import os
+import re
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -278,12 +279,72 @@ def _extract_text_from_input(content: Any) -> str:
     return str(content) if content is not None else ""
 
 
+def classify_intent_fast_path(user_prompt: str) -> Literal["plan", "book"] | None:
+    """Fast deterministic intent classification (<0.1ms) for common unambiguous prompts."""
+    text = user_prompt.lower().strip()
+    if not text:
+        return "plan"
+
+    # Direct booking intent patterns
+    # e.g., "book slot 2", "confirm Tuesday 12:00", "reserve option 1", "let's go with slot 1", "take slot 2"
+    booking_keywords = (
+        "book",
+        "confirm",
+        "reserve",
+        "choose",
+        "select",
+        "i'll take slot",
+        "take slot",
+        "let's book",
+        "lets book",
+        "let's go with",
+        "lets go with",
+        "lock in",
+        "finalize",
+    )
+    if any(k in text for k in booking_keywords) and not any(p in text for p in ("plan", "suggest", "available", "availability")):
+        return "book"
+
+    if re.search(r"\b(book|reserve|confirm)\s+(slot|option|\d{1,2}:\d{2})", text):
+        return "book"
+
+    # Direct planning intent patterns
+    # e.g., "plan a team lunch", "schedule a lunch for Friday", "find available time slots", "when can the team meet"
+    planning_prefixes = (
+        "plan",
+        "find",
+        "schedule a",
+        "schedule lunch",
+        "coordinate",
+        "what time",
+        "what times",
+        "when can",
+        "who is",
+        "who's",
+        "show available",
+        "check availability",
+        "suggest",
+    )
+    if any(text.startswith(prefix) for prefix in planning_prefixes):
+        return "plan"
+
+    if re.search(r"\b(lunch|meeting|availability|available slots|time slots)\b", text) and not re.search(r"\b(book|confirmed|reserved)\b", text):
+        return "plan"
+
+    return None
+
+
 @node(name="intent_router")
 async def intent_router(ctx: Context, node_input: Any) -> Event:
     """Routes user messages between the planning and booking branches."""
     user_prompt = _extract_text_from_input(node_input)
     if not user_prompt.strip():
         return Event(output=node_input, route="plan")
+
+    fast_route = classify_intent_fast_path(user_prompt)
+    if fast_route is not None:
+        logger.info("Fast-path routed intent for %r -> %s", user_prompt[:40], fast_route)
+        return Event(output=node_input, route=fast_route)
 
     try:
         client = genai.Client(vertexai=True, location=MODEL_LOCATION)
@@ -307,7 +368,7 @@ async def intent_router(ctx: Context, node_input: Any) -> Event:
     except Exception as e:
         logger.warning("Intent router LLM failed, defaulting to 'plan': %s", e)
         lower = user_prompt.lower().strip()
-        if lower.startswith(("book", "confirm", "reserve", "choose", "select")):
+        if any(w in lower for w in ("book", "confirm", "reserve", "choose", "select")):
             route = "book"
         else:
             route = "plan"

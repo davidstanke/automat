@@ -109,3 +109,129 @@ async def cancel_all_bookings(expected_count: int) -> str:
         return f"Cancelled all {deleted} bookings. Every slot is free again."
     except Exception as e:
         return f"Failed to cancel bookings: {str(e)}"
+
+
+def _parse_time_to_minutes(time_str: str) -> int:
+    h, m = map(int, time_str.split(":"))
+    return h * 60 + m
+
+
+def _match_day_of_week(text: str) -> str | None:
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    t = text.lower()
+    for d in days:
+        if d.lower() in t:
+            return d
+    return None
+
+
+async def find_available_slots(day_of_week: str = "Friday", duration_minutes: int = 60) -> str:
+    """Calculates and ranks overlapping team availability for a specific day of the week.
+
+    Fast deterministic interval tool (<1ms) that cross-references all team members'
+    weekly availability schedules and existing bookings to generate a verified shortlist
+    with exact attendance counts per slot.
+
+    Args:
+        day_of_week: The target day (e.g. 'Friday', 'Tuesday', 'Monday'). Defaults to 'Friday'.
+        duration_minutes: The slot duration in minutes (default 60).
+    """
+    print(f"[Scheduling Agent] Finding available slots for {day_of_week}...")
+    target_day = _match_day_of_week(day_of_week) or "Friday"
+    members = get_team_members()
+    if not members:
+        return "No team members found."
+
+    member_names = [m["name"] for m in members]
+    total_members = len(members)
+    roster_line = f"Team ({total_members}): {', '.join(member_names)}"
+
+    # Fetch existing bookings to avoid proposing double-booked slots
+    existing_bookings = []
+    try:
+        existing_bookings = await bookings.list_bookings()
+    except Exception as e:
+        print(f"[Scheduling Agent] Could not check bookings: {e}")
+
+    booked_slots = set()
+    for b in existing_bookings:
+        ts = b.get("time_slot", "").lower()
+        if target_day.lower() in ts:
+            booked_slots.add(ts)
+
+    # Standard candidate start hours (prioritize lunch window 11:00-14:00, then full day)
+    candidate_start_hours = [12, 13, 11, 10, 14, 9, 15, 16]
+    evaluated_slots = []
+
+    for start_h in candidate_start_hours:
+        s_min = start_h * 60
+        e_min = s_min + duration_minutes
+        end_h = start_h + (duration_minutes // 60)
+        end_m = duration_minutes % 60
+        slot_label = f"{target_day} {start_h:02d}:00-{end_h:02d}:{end_m:02d}"
+
+        # Check if slot conflicts with an existing booking
+        is_booked = any(
+            f"{start_h:02d}:00" in bs or f"{start_h}:{0:02d}" in bs
+            for bs in booked_slots
+        )
+
+        free_members = []
+        unavailable_members = []
+
+        for m in members:
+            day_slots = m.get("weekly_availability", {}).get(target_day, [])
+            is_free = False
+            for slot in day_slots:
+                try:
+                    sh, eh = slot.split("-")
+                    if _parse_time_to_minutes(sh) <= s_min and _parse_time_to_minutes(eh) >= e_min:
+                        is_free = True
+                        break
+                except Exception:
+                    continue
+            if is_free:
+                free_members.append(m["name"])
+            else:
+                unavailable_members.append(m["name"])
+
+        free_count = len(free_members)
+        evaluated_slots.append({
+            "slot_label": slot_label,
+            "free_count": free_count,
+            "free_members": free_members,
+            "unavailable": unavailable_members,
+            "is_booked": is_booked,
+            "is_lunch_hour": 11 <= start_h <= 13,
+        })
+
+    # Sort slots: unbooked first, then highest free_count, then lunch hours
+    evaluated_slots.sort(
+        key=lambda s: (not s["is_booked"], s["free_count"], s["is_lunch_hour"]),
+        reverse=True,
+    )
+
+    viable_slots = [s for s in evaluated_slots if not s["is_booked"] and s["free_count"] > 0][:4]
+
+    output_lines = [
+        "## Team Roster",
+        roster_line,
+        "",
+        "## Available Time Slots",
+    ]
+
+    if not viable_slots:
+        output_lines.append(f"No unbooked slots are available for the entire team on {target_day}.")
+        if booked_slots:
+            output_lines.append(f"(Existing bookings: {', '.join(booked_slots)})")
+    else:
+        for idx, s in enumerate(viable_slots, 1):
+            fc = s["free_count"]
+            if fc == total_members:
+                unavail_str = f"{fc} of {total_members} free"
+            else:
+                unavail_names = ", ".join(s["unavailable"])
+                unavail_str = f"{fc} of {total_members} free - {unavail_names} unavailable"
+            output_lines.append(f"{idx}. {s['slot_label']} ({unavail_str})")
+
+    return "\n".join(output_lines)
