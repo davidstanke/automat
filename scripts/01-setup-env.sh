@@ -55,7 +55,7 @@ _GOOGLE_GENAI_LOCATION=${GOOGLE_GENAI_LOCATION:-global}
 _BIGQUERY_LOCATION=${BIGQUERY_LOCATION:-US}
 # `|| true`: pipefail would abort the script when .env.example is not present.
 _EXAMPLE_MODEL=$(sed -n 's/^export GOOGLE_GENAI_MODEL="\([^"]*\)".*/\1/p' .env.example 2>/dev/null | head -n 1 || true)
-_GOOGLE_GENAI_MODEL=${GOOGLE_GENAI_MODEL:-${_EXAMPLE_MODEL:-gemini-3.8-flash}}
+_GOOGLE_GENAI_MODEL=${GOOGLE_GENAI_MODEL:-${_EXAMPLE_MODEL:-gemini-3.7-flash}}
 
 read -r -p "Enter GCP Project ID [${_GOOGLE_CLOUD_PROJECT_ID}]: " GOOGLE_CLOUD_PROJECT_ID || true
 read -r -p "Enter GCP Deployment Location/Region [${_GOOGLE_CLOUD_LOCATION}]: " GOOGLE_CLOUD_LOCATION || true

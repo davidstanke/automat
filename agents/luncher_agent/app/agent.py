@@ -57,7 +57,7 @@ PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
 # Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.7-flash")
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 
 logger.info("Using Gemini model '%s' in location '%s'", MODEL, MODEL_LOCATION)

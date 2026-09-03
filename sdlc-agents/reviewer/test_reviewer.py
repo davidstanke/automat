@@ -37,7 +37,7 @@ class TestReviewerSubagentConfigs(unittest.TestCase):
                 get_synthesizer_config,
             ]:
                 cfg = cfg_fn()
-                self.assertEqual(cfg.model, "gemini-3.8-flash")
+                self.assertEqual(cfg.model, "gemini-3.7-flash")
                 self.assertEqual(cfg.location, "global")
                 self.assertEqual(cfg.project, "test-project")
                 self.assertTrue(cfg.vertex)

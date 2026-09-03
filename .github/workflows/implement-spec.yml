@@ -100,7 +100,7 @@ jobs:
           GOOGLE_GENAI_USE_VERTEXAI: "true"
           GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
           GOOGLE_GENAI_LOCATION: "global"
-          GOOGLE_GENAI_MODEL: ${{ vars.GOOGLE_GENAI_MODEL || 'gemini-3.8-flash' }}
+          GOOGLE_GENAI_MODEL: ${{ vars.GOOGLE_GENAI_MODEL || 'gemini-3.7-flash' }}
         run: |
           SPEC_PATH="${{ steps.params.outputs.spec_path }}"
           BRANCH="${{ steps.params.outputs.branch }}"

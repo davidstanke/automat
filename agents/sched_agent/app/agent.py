@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
 # Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.7-flash")
 
 logger.info("Using Gemini model '%s' in location '%s'", MODEL, MODEL_LOCATION)
 root_agent = Agent(

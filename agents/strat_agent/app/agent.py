@@ -106,7 +106,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
 # Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.7-flash")
 
 # Pre-warm document cache on module load if local files exist
 try:
