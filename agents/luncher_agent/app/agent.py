@@ -75,13 +75,19 @@ def _extract_part_text(part: Any) -> str:
 async def isolate_context_hook(ctx: Any, a2a_request: Any, params: Any) -> tuple[Any, Any]:
     """Strips leaked cross-agent context from A2A message parts.
 
-    Ensures parallel sub-agents (e.g. strategy_agent and scheduling_agent)
+    Ensures parallel sub-agents (e.g. strategy_agent, scheduling_agent, and cater_agent)
     only receive the user's direct prompt without other agents' outputs.
     """
     cleaned_parts = []
     for part in a2a_request.parts:
         text = _extract_part_text(part)
-        if "[scheduling_agent] said:" in text or "[strategy_agent] said:" in text or "For context:" in text:
+        if (
+            "[scheduling_agent] said:" in text
+            or "[strategy_agent] said:" in text
+            or "[cater_agent] said:" in text
+            or "[catering_agent] said:" in text
+            or "For context:" in text
+        ):
             continue
         cleaned_parts.append(part)
     if cleaned_parts:
@@ -236,7 +242,7 @@ def discover_sub_agent(
     )
 
 
-# Discover sub-agents (Strategy Agent and Scheduling Agent)
+# Discover sub-agents (Strategy Agent, Scheduling Agent, and Catering Agent)
 strategy_agent = discover_sub_agent(
     agent_name="strategy_agent",
     default_local_url="http://localhost:8081/a2a/app/.well-known/agent-card.json",
@@ -251,6 +257,14 @@ scheduling_agent = discover_sub_agent(
     default_local_url="http://localhost:8082/a2a/app/.well-known/agent-card.json",
     description=(
         "Helps coordinate meeting times and availability across team members interactively."
+    ),
+)
+
+cater_agent = discover_sub_agent(
+    agent_name="cater_agent",
+    default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+    description=(
+        "Provides catering menu options and food suggestions for team lunch meetings."
     ),
 )
 
@@ -414,11 +428,11 @@ luncher_agent = Workflow(
         (
             intent_router,
             {
-                "plan": (strategy_agent, scheduling_agent),
+                "plan": (strategy_agent, scheduling_agent, cater_agent),
                 "book": booking_handler,
             },
         ),
-        ((strategy_agent, scheduling_agent), join_info_gatherer),
+        ((strategy_agent, scheduling_agent, cater_agent), join_info_gatherer),
         (join_info_gatherer, synthesizer_agent),
     ],
 )

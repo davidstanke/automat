@@ -88,7 +88,12 @@ root_agent = Agent(
         "'Diego is only free Friday morning' -- overrides their stored availability, so a 12:00 slot does not include "
         "Diego. Never state a count that contradicts something you were just told; if a constraint rules someone out, "
         "say who and pick a slot that fits, or say plainly that none fits everyone.\n"
-        "- STEP 4 (BOOKING EXECUTION): Only call 'book_meeting' after the user explicitly accepts one of the slots. Never auto-book without consent. Confirm the booking clearly with slot and booking details.\n"
+        "- STEP 4 (BOOKING EXECUTION & CATERING SELECTION): Only call 'book_meeting' after the user explicitly accepts one of the slots. "
+        "When the user confirms a booking:\n"
+        "  - If the user specifies a catering menu choice (e.g. 'Menu 2', 'Veggie Tacos', 'Option 2'), pass the menu identifier ('menu_1', 'menu_2', or 'menu_3') to 'book_meeting'.\n"
+        "  - If the user confirms a time slot without specifying a catering menu, pass 'menu_1' (default) to 'book_meeting'.\n"
+        "  - If the user specifies an invalid or unrecognized menu choice (e.g. 'Menu 4', 'Menu 5'), DO NOT call 'book_meeting'. Reject the choice and ask the user to select from Menu 1 (Buffalo Chicken Wrap), Menu 2 (Veggie Tacos), or Menu 3 (Lamb Vindaloo).\n"
+        "  - Confirm the booking clearly with time slot, attendees, booking ID, and selected catering menu details.\n"
         "- STEP 5 (REJECTION & ALTERNATIVES): If the user rejects the whole shortlist, search for the "
         "next best slots and present a fresh shortlist."
     ),
