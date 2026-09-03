@@ -22,24 +22,28 @@ agent's roster.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from google.adk.tools import FunctionTool, ToolContext
 
 
 ROLE_DESCRIPTION = (
     "You are the central Luncher Synthesizer Agent. You receive context containing "
-    "strategic corporate priorities and team schedule options.\n\n"
+    "strategic corporate priorities, team schedule options, and curated thematic catering menus "
+    "from the catering agent.\n\n"
     "Synthesize them into a single structured team lunch proposal and call the "
     "`format_lunch_proposal` tool to produce the final response. Frame the lunch "
     "around the strategic objective it serves, include every team member by name, "
-    "and carry across who cannot attend each slot exactly as the scheduling agent reported it.\n\n"
+    "carry across who cannot attend each slot exactly as the scheduling agent reported it, "
+    "and extract and forward all 3 thematic catering menus and any active dietary accommodations "
+    "from the catering agent into `format_lunch_proposal`.\n\n"
     "BOOKING TURNS. When the user confirms or requests to book a specific slot (e.g., 'Book Tuesday 12:00' "
-    "or 'Option 1 works'), do not call `format_lunch_proposal`. Reply with a concise confirmation "
-    "of at most four bullets:\n"
+    "or 'Option 1 works'), do not call `format_lunch_proposal`. Delegate the selected slot and catering menu "
+    "to the scheduling agent and reply with a concise confirmation of at most four bullets:\n"
     "* **Time Slot**: [selected slot]\n"
     "* **Attendees**: [list of attendees]\n"
-    "* **Booking ID**: [booking id or 'Confirmed']\n"
-    "* **Food Reminder**: You might want to order some food for this meeting.\n\n"
+    "* **Booking ID**: [booking id]\n"
+    "* **Catering Menu**: [Theme name: selected items]\n\n"
     "Say each fact once. No extra recap or pleasantries."
 )
 
@@ -73,8 +77,10 @@ def _roster_from_text(roster_text: str) -> list[str] | None:
     return None
 
 
-def _scheduling_agent_text(tool_context: ToolContext) -> str:
+def _scheduling_agent_text(tool_context: ToolContext | None) -> str:
     """Concatenates what the scheduling agent said during this invocation."""
+    if tool_context is None:
+        return ""
     session = getattr(tool_context, "session", None)
     if session is None:
         return ""
@@ -101,6 +107,13 @@ def _unsupported_attendees(attendees: list[str], roster_text: str) -> list[str]:
     return [name for name in attendees if name.casefold() not in haystack]
 
 
+def _format_item_name(item: Any) -> str:
+    """Extracts a clean name from an item dict or string."""
+    if isinstance(item, dict):
+        return str(item.get("name", "")).strip()
+    return str(item).strip()
+
+
 def build_lunch_proposal_markdown(
     *,
     title: str,
@@ -108,6 +121,8 @@ def build_lunch_proposal_markdown(
     attendees: list[str],
     time_slots: list[dict],
     recommended_slot: str,
+    catering_menus: list[dict],
+    accommodations: str = "",
 ) -> str:
     """Builds the structured Markdown text for a lunch proposal."""
     if not time_slots:
@@ -118,6 +133,24 @@ def build_lunch_proposal_markdown(
         raise ValueError(
             f"recommended_slot {recommended_slot!r} is not one of the offered slots {values!r}"
         )
+
+    if catering_menus is None or len(catering_menus) != 3:
+        count = len(catering_menus) if catering_menus is not None else 0
+        raise ValueError(
+            f"Exactly 3 thematic catering menus are required, got {count}"
+        )
+
+    required_courses = ("mains", "sides", "beverages", "desserts")
+    for index, menu in enumerate(catering_menus, start=1):
+        if not isinstance(menu, dict):
+            raise ValueError(f"Catering menu {index} must be a dictionary")
+        if not menu.get("theme_name") or not str(menu["theme_name"]).strip():
+            raise ValueError(f"Catering menu {index} is missing a valid 'theme_name'")
+        for course in required_courses:
+            if course not in menu or not menu[course]:
+                raise ValueError(
+                    f"Catering menu {index} ({menu.get('theme_name')}) is missing or has empty '{course}'"
+                )
 
     slots_formatted = []
     for index, slot in enumerate(time_slots, start=1):
@@ -130,17 +163,59 @@ def build_lunch_proposal_markdown(
     slots_section = "\n".join(slots_formatted)
     attendees_str = ", ".join(attendees)
 
-    return (
-        f"# {title}\n\n"
-        f"**Strategic Rationale**: {rationale}\n\n"
-        f"### Included Team Members\n"
-        f"{attendees_str}\n\n"
-        f"### Proposed Time Slots\n"
-        f"{slots_section}\n\n"
-        f"You might want to order some food for this meeting.\n\n"
-        f"---\n"
-        f"*To confirm, reply with your preferred time slot (e.g., \"Book {time_slots[0]['label']}\").*"
+    menus_formatted = []
+    for index, menu in enumerate(catering_menus, start=1):
+        theme = str(menu["theme_name"]).strip()
+        mains_str = ", ".join(
+            name
+            for item in menu["mains"]
+            if (name := _format_item_name(item))
+        )
+        sides_str = ", ".join(
+            name
+            for item in menu["sides"]
+            if (name := _format_item_name(item))
+        )
+        beverages_str = ", ".join(
+            name
+            for item in menu["beverages"]
+            if (name := _format_item_name(item))
+        )
+        desserts_str = ", ".join(
+            name
+            for item in menu["desserts"]
+            if (name := _format_item_name(item))
+        )
+        menus_formatted.append(
+            f"{index}. **{theme}**\n"
+            f"   * *Mains*: {mains_str}\n"
+            f"   * *Sides*: {sides_str}\n"
+            f"   * *Beverages*: {beverages_str}\n"
+            f"   * *Desserts*: {desserts_str}"
+        )
+    menus_section = "\n".join(menus_formatted)
+
+    proposal_parts = [
+        f"# {title}",
+        f"**Strategic Rationale**: {rationale}",
+        f"### Included Team Members\n{attendees_str}",
+        f"### Proposed Time Slots\n{slots_section}",
+        f"### Proposed Catering Menus\n{menus_section}",
+    ]
+
+    if accommodations and accommodations.strip():
+        acc_text = accommodations.strip()
+        if not acc_text.startswith("### Dietary Accommodations"):
+            proposal_parts.append(f"### Dietary Accommodations\n{acc_text}")
+        else:
+            proposal_parts.append(acc_text)
+
+    first_slot_label = time_slots[0]["label"]
+    proposal_parts.append(
+        f"---\n*To confirm, reply with your preferred time slot (e.g., \"Book {first_slot_label}\").*"
     )
+
+    return "\n\n".join(proposal_parts)
 
 
 def format_lunch_proposal(
@@ -151,7 +226,9 @@ def format_lunch_proposal(
     slot_values: list[str],
     slot_absentees: list[str],
     recommended_slot: str,
-    tool_context: ToolContext,
+    catering_menus: list[dict],
+    tool_context: ToolContext | None = None,
+    accommodations: str = "",
 ) -> str:
     """Formats the team lunch proposal as structured Markdown text.
 
@@ -177,6 +254,11 @@ def format_lunch_proposal(
             whole team can make. Every name must be one the scheduling agent
             listed.
         recommended_slot: The slot_values entry you recommend; must be one of them.
+        catering_menus: Exactly 3 thematic catering menus from the catering agent,
+            each containing theme_name, mains, sides, beverages, and desserts.
+        tool_context: ADK tool context for inspecting session events.
+        accommodations: Optional note on active dietary accommodations filtered for
+            the team (e.g. "Filtered to accommodate: Peanut allergy (Alice)").
     """
     try:
         if len(slot_labels) != len(slot_values):
@@ -243,6 +325,8 @@ def format_lunch_proposal(
                 for label, value, absent in zip(slot_labels, slot_values, slot_absentees)
             ],
             recommended_slot=recommended_slot,
+            catering_menus=catering_menus,
+            accommodations=accommodations,
         )
         return markdown
     except (ValueError, KeyError, TypeError) as error:

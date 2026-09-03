@@ -419,7 +419,7 @@ synthesizer_agent = Agent(
         client_kwargs={"location": MODEL_LOCATION},
     ),
     name="lunch_synthesizer",
-    description="Synthesizes corporate strategy objectives and scheduling options into a team lunch proposal.",
+    description="Synthesizes corporate strategy objectives, scheduling options, and catering menus into a team lunch proposal.",
     instruction=SYNTHESIZER_INSTRUCTION,
     tools=[format_lunch_proposal_tool],
 )
