@@ -43,9 +43,8 @@ sched_retry_policy = types.HttpRetryOptions(
 logger = logging.getLogger(__name__)
 
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
-# Pinned version. Override via GOOGLE_GENAI_MODEL. Only served from the `global`
-# endpoint -- regional locations return 404 for it.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.6-flash")
+# Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
 
 logger.info("Using Gemini model '%s' in location '%s'", MODEL, MODEL_LOCATION)
 root_agent = Agent(
