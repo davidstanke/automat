@@ -27,19 +27,62 @@ def get_team_members() -> list[dict]:
         return []
 
 
-async def book_meeting(time_slot: str, reason: str = "") -> str:
-    """Records a confirmed meeting in the shared team bookings.
+def normalize_catering_menu(menu_choice: str | None) -> dict | None:
+    """Resolves a menu choice string to its validated CateringMenu object.
+
+    Returns the menu dict if valid, or None if invalid. If empty/None, returns menu_1 (default).
+    """
+    if not menu_choice or not str(menu_choice).strip():
+        return bookings.MOCK_CATERING_MENUS["menu_1"]
+
+    clean = str(menu_choice).lower().strip()
+    if clean in ("menu_1", "menu 1", "1", "option 1", "option_1", "buffalo chicken wrap", "buffalo chicken", "buffalo"):
+        return bookings.MOCK_CATERING_MENUS["menu_1"]
+    if clean in ("menu_2", "menu 2", "2", "option 2", "option_2", "veggie tacos", "veggie", "tacos", "vegetarian"):
+        return bookings.MOCK_CATERING_MENUS["menu_2"]
+    if clean in ("menu_3", "menu 3", "3", "option 3", "option_3", "lamb vindaloo", "vindaloo", "lamb"):
+        return bookings.MOCK_CATERING_MENUS["menu_3"]
+
+    if clean in bookings.MOCK_CATERING_MENUS:
+        return bookings.MOCK_CATERING_MENUS[clean]
+
+    return None
+
+
+async def book_meeting(
+    time_slot: str,
+    reason: str = "",
+    catering_menu: str = "menu_1",
+    organizer_id: str = "organizer_default",
+) -> str:
+    """Records a confirmed meeting in the shared team bookings with catering selection.
 
     Args:
         time_slot: The day and time range of the confirmed meeting, e.g., "Monday 10:00-11:00".
         reason: Optional brief reason/summary for selecting this choice.
+        catering_menu: Catering menu choice ('menu_1', 'menu_2', 'menu_3', or name). Defaults to 'menu_1'.
+        organizer_id: Identifier of the organizer booking the meeting.
     """
-    print(f"[Scheduling Agent] Finalizing booking: {time_slot}...")
-    try:
-        booking = await bookings.add_booking(time_slot, reason)
+    print(f"[Scheduling Agent] Finalizing booking: {time_slot} with catering {catering_menu}...")
+    resolved_menu = normalize_catering_menu(catering_menu)
+    if resolved_menu is None:
         return (
-            f"Successfully booked! Meeting scheduled for {time_slot}. "
-            f"Booking ID: {booking['booking_id']}."
+            f"Error: '{catering_menu}' is not a valid catering menu option. "
+            "Please choose from Menu 1 (Buffalo Chicken Wrap), Menu 2 (Veggie Tacos), or Menu 3 (Lamb Vindaloo)."
+        )
+
+    try:
+        booking = await bookings.add_booking(
+            time_slot=time_slot,
+            reason=reason,
+            catering_menu=resolved_menu,
+            organizer_id=organizer_id,
+        )
+        menu_items_str = ", ".join(resolved_menu["items"])
+        return (
+            f"Successfully booked! Meeting scheduled for {time_slot}.\n"
+            f"Booking ID: {booking['booking_id']}.\n"
+            f"Catering: {resolved_menu['name']} ({menu_items_str})."
         )
     except Exception as e:
         return f"Failed to book meeting: {str(e)}"
@@ -59,6 +102,7 @@ async def get_bookings() -> str:
         lines = [
             f"- {b['time_slot']}"
             + (f" ({b['reason']})" if b.get("reason") else "")
+            + (f" [Menu: {b['catering_menu']['name']}]" if b.get("catering_menu") else "")
             + f" (booking {b['booking_id']})"
             for b in existing
         ]

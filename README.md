@@ -6,7 +6,7 @@ It coordinates strategy-aligned team lunch meetings by orchestrating specialized
 - 👑 **Luncher Orchestrator** (`luncher_agent`): The primary user-facing frontend agent that delegates tasks to the Strategy and Scheduling agents and synthesizes cohesive recommendations.
 - 🎯 **Strategy Agent** (`strat_agent`): Analyzes corporate strategy documents and product launch roadmaps.
 - 📅 **Scheduling Agent** (`sched_agent`): Coordinates team member availability, calendars, and bookings.
-- 🥪 [UNIMPLEMENTED] **Catering Agent** (`cater_agent`): Connects to catering menu service to suggest food for meetings.
+- 🥪 **Catering Agent** (`cater_agent`): Provides catering menu options to serve at lunch meetings.
 ---
 
 ## 💻 Reading This Guide in VS Code
@@ -34,7 +34,7 @@ and Linux).
 
 The orchestrator executes an ADK 2.0+ `Workflow` graph:
 - **Intent Router**: Classifies the prompt into planning vs booking intents.
-- **Planning Path (Parallel Gathering & Synthesis)**: Concurrently dispatches requests to remote A2A peers `strategy_agent` and `scheduling_agent`, joins their outputs via `JoinNode`, and passes the combined context to `lunch_synthesizer` to deterministically format the structured Markdown proposal.
+- **Planning Path (Parallel Gathering & Synthesis)**: Concurrently dispatches requests to remote A2A peers `strategy_agent`, `scheduling_agent`, and `cater_agent`, joins their outputs via `JoinNode`, and passes the combined context to `lunch_synthesizer` to deterministically format the structured Markdown proposal.
 - **Booking Path (Direct Delegation)**: Routes selection/confirmation turns directly to `booking_handler` which delegates booking execution to `scheduling_agent`.
 
 ```mermaid
@@ -49,6 +49,7 @@ graph TD
 
         Router -->|Route: plan| StratA2A
         Router -->|Route: plan| SchedA2A
+        Router -->|Route: plan| CaterA2A
         Router -->|Route: book| BookingHandler
         BookingHandler -->|Delegate| SchedA2A
     end
@@ -69,16 +70,23 @@ graph TD
         SchedLLM --> SchedTools
     end
 
+    subgraph CaterAgent ["🥪 Catering Agent (Agent Runtime)"]
+        CaterA2A["A2A FastAPI Endpoint"]
+        CaterLLM["Gemini Model"]
+        CaterTools["🛠️ Tools:<br/>• get_catering_menus()"]
+        CaterA2A --> CaterLLM
+        CaterLLM --> CaterTools
+    end
+
     GCS[("🗄️ Cloud Storage<br/>gs://$PROJECT_ID-strategy-docs/")]
-    BQ[("📊 BigQuery via MCP<br/>catering.menu_items")]
     MemBank[("🧠 Memory Bank")]
 
     StratTools -->|PDF Document Read| GCS
-    SchedTools -->|Catering & Menu Query| BQ
     SchedTools -->|Team bookings<br/>scope: sched_agent / team| MemBank
 
     StratA2A -->|Strategic Context| JoinGatherer
     SchedA2A -->|Availability & Bookings| JoinGatherer
+    CaterA2A -->|Catering Menus| JoinGatherer
 
     JoinGatherer -->|Combined Context Handoff| Synthesizer
     Synthesizer -->|Structured Markdown Proposal| User
