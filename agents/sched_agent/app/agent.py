@@ -62,7 +62,7 @@ root_agent = Agent(
         "time for the team.\n\n"
         "Your available tools:\n"
         "1. 'get_team_members' - Loads profiles, timezone, and weekly availability.\n"
-        "2. 'book_meeting' - Finalizes and records the booked meeting when the user confirms.\n"
+        "2. 'book_meeting' - Finalizes and records the booked meeting when the user confirms, capturing any chosen catering menu details (theme and items).\n"
         "3. 'get_bookings' - Lists meetings the team has already booked. Bookings are shared across the whole team, so this returns the same list whoever asks.\n"
         "4. 'cancel_booking' - Cancels a booking by its id, freeing the slot for everyone. Resolve a day or time to an id with 'get_bookings' first, and confirm which meeting you are about to cancel if more than one could match.\n"
         "5. 'cancel_all_bookings' - Clears the team's entire calendar. Never call it on an ambiguous request: call 'get_bookings', tell the user exactly how many bookings will go, wait for them to confirm, then pass that count as 'expected_count'.\n\n"
@@ -87,7 +87,7 @@ root_agent = Agent(
         "'Diego is only free Friday morning' -- overrides their stored availability, so a 12:00 slot does not include "
         "Diego. Never state a count that contradicts something you were just told; if a constraint rules someone out, "
         "say who and pick a slot that fits, or say plainly that none fits everyone.\n"
-        "- STEP 4 (BOOKING EXECUTION): Only call 'book_meeting' after the user explicitly accepts one of the slots. Never auto-book without consent. Confirm the booking clearly with slot and booking details.\n"
+        "- STEP 4 (BOOKING EXECUTION): Only call 'book_meeting' after the user explicitly accepts one of the slots. Never auto-book without consent. When booking, capture any selected catering menu details (catering theme and items) if the user or workflow specified catering. Confirm the booking clearly with slot, booking, and catering details.\n"
         "- STEP 5 (REJECTION & ALTERNATIVES): If the user rejects the whole shortlist, search for the "
         "next best slots and present a fresh shortlist."
     ),

@@ -6,6 +6,7 @@ constant team scope, verbatim write, scope-keyed listing with an explicit page s
 
 import asyncio
 import json
+import re
 
 import pytest
 
@@ -262,3 +263,118 @@ def test_clearing_all_falls_back_in_process_when_no_engine_configured(
     assert len(asyncio.run(bookings.list_bookings())) == 2
     assert asyncio.run(bookings.delete_all_bookings(2)) == 2
     assert asyncio.run(bookings.list_bookings()) == []
+
+
+def test_new_booking_format_and_fields() -> None:
+    """_new_booking creates a valid booking dict with matching booking_id pattern."""
+    booking = bookings._new_booking("Friday 12:00-13:00", "Team lunch")
+    assert re.match(r"^bk_[0-9]+_[a-f0-9]{6}$", booking["booking_id"])
+    assert booking["time_slot"] == "Friday 12:00-13:00"
+    assert booking["reason"] == "Team lunch"
+    assert "booked_at" in booking
+    # Backwards compatibility: omitted catering_menu is absent or None
+    assert booking.get("catering_menu") is None
+
+
+def test_new_booking_with_catering_menu() -> None:
+    """_new_booking accepts and persists catering_menu structure."""
+    menu = {
+        "theme_name": "Baja Fiesta",
+        "selected_items": ["Grilled Mahi Mahi Tacos", "Tortilla Chips"],
+    }
+    booking = bookings._new_booking("Tuesday 12:00-13:00", "Project sync", catering_menu=menu)
+    assert re.match(r"^bk_[0-9]+_[a-f0-9]{6}$", booking["booking_id"])
+    assert booking["time_slot"] == "Tuesday 12:00-13:00"
+    assert booking["reason"] == "Project sync"
+    assert booking["catering_menu"] == menu
+
+
+def test_new_booking_empty_catering_menu_backwards_compatibility() -> None:
+    """_new_booking handles empty or None catering_menu for backwards compatibility."""
+    booking_none = bookings._new_booking("Monday 10:00-11:00", catering_menu=None)
+    assert booking_none.get("catering_menu") is None
+
+    booking_empty = bookings._new_booking("Monday 10:00-11:00", catering_menu={})
+    assert booking_empty.get("catering_menu") in (None, {})
+
+
+def test_write_persists_catering_menu_to_memory_bank(fake: _FakeMemories) -> None:
+    """add_booking stores the catering_menu inside the verbatim Memory Bank fact JSON."""
+    menu = {
+        "theme_name": "Baja Fiesta",
+        "selected_items": ["Grilled Mahi Mahi Tacos", "Tortilla Chips"],
+    }
+    booking = asyncio.run(
+        bookings.add_booking("Friday 12:00-13:00", "Team lunch", catering_menu=menu)
+    )
+
+    assert len(fake.create_calls) == 1
+    call = fake.create_calls[0]
+    assert call["fact"].startswith("booking:")
+    fact_data = json.loads(call["fact"][len("booking:"):])
+    assert fact_data["time_slot"] == "Friday 12:00-13:00"
+    assert fact_data["reason"] == "Team lunch"
+    assert fact_data["catering_menu"] == menu
+    assert fact_data["booking_id"] == booking["booking_id"]
+
+
+def test_add_booking_omitted_or_empty_catering_menu_backwards_compatible(
+    fake: _FakeMemories,
+) -> None:
+    """add_booking stores a valid booking record without catering_menu when omitted or None."""
+    asyncio.run(bookings.add_booking("Friday 12:00-13:00", "Team lunch"))
+    asyncio.run(bookings.add_booking("Monday 12:00-13:00", "Sync", catering_menu=None))
+
+    assert len(fake.create_calls) == 2
+    for call in fake.create_calls:
+        fact_data = json.loads(call["fact"][len("booking:"):])
+        assert fact_data.get("catering_menu") is None
+
+
+def test_round_trip_preserves_catering_menu(fake: _FakeMemories) -> None:
+    """list_bookings retrieves both catering and non-catering bookings intact."""
+    menu = {
+        "theme_name": "Mediterranean Delight",
+        "selected_items": ["Falafel Wrap", "Greek Salad", "Baklava"],
+    }
+    asyncio.run(bookings.add_booking("Friday 12:00-13:00", "Celebration", catering_menu=menu))
+    asyncio.run(bookings.add_booking("Monday 10:00-11:00", "Regular 1:1"))
+
+    listed = asyncio.run(bookings.list_bookings())
+    assert len(listed) == 2
+
+    # Find the catering booking
+    catering_booking = next((b for b in listed if b.get("catering_menu")), None)
+    assert catering_booking is not None
+    assert catering_booking["time_slot"] == "Friday 12:00-13:00"
+    assert catering_booking["catering_menu"] == menu
+
+    # Non-catering booking remains valid
+    regular_booking = next((b for b in listed if not b.get("catering_menu")), None)
+    assert regular_booking is not None
+    assert regular_booking["time_slot"] == "Monday 10:00-11:00"
+
+
+def test_in_process_fallback_stores_and_lists_catering_menu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Agent Engine is unset, in-process store preserves catering_menu."""
+    monkeypatch.delenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", raising=False)
+    monkeypatch.setattr(bookings, "_local_bookings", [])
+
+    menu = {
+        "theme_name": "Artisan Deli",
+        "selected_items": ["Turkey Club", "Chips"],
+    }
+    booking = asyncio.run(
+        bookings.add_booking("Thursday 12:00-13:00", "Lunch", catering_menu=menu)
+    )
+
+    assert len(bookings._local_bookings) == 1
+    assert bookings._local_bookings[0]["catering_menu"] == menu
+
+    listed = asyncio.run(bookings.list_bookings())
+    assert len(listed) == 1
+    assert listed[0]["booking_id"] == booking["booking_id"]
+    assert listed[0]["catering_menu"] == menu
+

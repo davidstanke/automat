@@ -1,5 +1,8 @@
-import os
+from __future__ import annotations
+
 import json
+import os
+from typing import Any
 
 from . import bookings
 
@@ -27,16 +30,37 @@ def get_team_members() -> list[dict]:
         return []
 
 
-async def book_meeting(time_slot: str, reason: str = "") -> str:
+async def book_meeting(
+    time_slot: str,
+    reason: str = "",
+    catering_theme: str = "",
+    catering_items: list[str] | str = "",
+) -> str:
     """Records a confirmed meeting in the shared team bookings.
 
     Args:
         time_slot: The day and time range of the confirmed meeting, e.g., "Monday 10:00-11:00".
         reason: Optional brief reason/summary for selecting this choice.
+        catering_theme: Optional chosen catering theme name, e.g., "Baja Fiesta".
+        catering_items: Optional chosen catering items (as a list of strings or comma-separated string).
     """
     print(f"[Scheduling Agent] Finalizing booking: {time_slot}...")
     try:
-        booking = await bookings.add_booking(time_slot, reason)
+        items: list[str] = []
+        if isinstance(catering_items, str):
+            items = [item.strip() for item in catering_items.split(",") if item.strip()]
+        elif isinstance(catering_items, list):
+            items = [str(item).strip() for item in catering_items if str(item).strip()]
+
+        theme = (catering_theme or "").strip()
+        catering_menu: dict[str, Any] | None = None
+        if theme or items:
+            catering_menu = {
+                "theme_name": theme,
+                "selected_items": items,
+            }
+
+        booking = await bookings.add_booking(time_slot, reason, catering_menu=catering_menu)
         return (
             f"Successfully booked! Meeting scheduled for {time_slot}. "
             f"Booking ID: {booking['booking_id']}."
@@ -56,9 +80,25 @@ async def get_bookings() -> str:
         existing = await bookings.list_bookings()
         if not existing:
             return "No meetings are currently booked."
+
+        def _catering_summary(b: dict[str, Any]) -> str:
+            cm = b.get("catering_menu")
+            if not cm:
+                return ""
+            theme = cm.get("theme_name", "")
+            items = ", ".join(cm.get("selected_items", []))
+            if theme and items:
+                return f" [Catering: {theme} ({items})]"
+            if theme:
+                return f" [Catering: {theme}]"
+            if items:
+                return f" [Catering: {items}]"
+            return ""
+
         lines = [
             f"- {b['time_slot']}"
             + (f" ({b['reason']})" if b.get("reason") else "")
+            + _catering_summary(b)
             + f" (booking {b['booking_id']})"
             for b in existing
         ]

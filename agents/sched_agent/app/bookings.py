@@ -59,9 +59,13 @@ def _memories():
     return client.aio.agent_engines.memories
 
 
-def _new_booking(time_slot: str, reason: str = "") -> dict[str, Any]:
+def _new_booking(
+    time_slot: str,
+    reason: str = "",
+    catering_menu: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     now = datetime.datetime.now(datetime.timezone.utc)
-    return {
+    booking: dict[str, Any] = {
         # Seconds alone collide when two bookings land in the same second, and
         # cancellation addresses a booking by this id.
         "booking_id": f"bk_{int(now.timestamp())}_{uuid.uuid4().hex[:6]}",
@@ -69,11 +73,18 @@ def _new_booking(time_slot: str, reason: str = "") -> dict[str, Any]:
         "reason": reason,
         "booked_at": now.isoformat(),
     }
+    if catering_menu:
+        booking["catering_menu"] = catering_menu
+    return booking
 
 
-async def add_booking(time_slot: str, reason: str = "") -> dict[str, Any]:
+async def add_booking(
+    time_slot: str,
+    reason: str = "",
+    catering_menu: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Records a booking in the team collection and returns it."""
-    booking = _new_booking(time_slot, reason)
+    booking = _new_booking(time_slot, reason, catering_menu=catering_menu)
     memories = _memories()
 
     if memories is None:
