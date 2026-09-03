@@ -552,6 +552,8 @@ dependencies = [
     { name = "google-antigravity" },
     { name = "httpx" },
     { name = "pydantic" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "uvicorn" },
     { name = "watchfiles" },
@@ -564,9 +566,20 @@ requires-dist = [
     { name = "google-antigravity", specifier = ">=0.1.12" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "uvicorn", specifier = ">=0.30.0" },
     { name = "watchfiles", specifier = ">=0.21.0" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/iniconfig/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/iniconfig/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12" },
 ]
 
 [[package]]
@@ -619,6 +632,24 @@ dependencies = [
 sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/mcp/mcp-1.29.1.tar.gz", hash = "sha256:1967ba4c315f7a375146209949f45950d18b0efd2f913d7cf3400bc723ee5f04" }
 wheels = [
     { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/mcp/mcp-1.29.1-py3-none-any.whl", hash = "sha256:b6310eeb59153300c4ab8b9aec4c52f4819a2d6a8e429eb43d908bed7c783648" },
+]
+
+[[package]]
+name = "packaging"
+version = "26.3"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/packaging/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/packaging/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c" },
+]
+
+[[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pluggy/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pluggy/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746" },
 ]
 
 [[package]]
@@ -783,6 +814,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pygments"
+version = "2.21.0"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pygments/pygments-2.21.0.tar.gz", hash = "sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pygments/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9" },
+]
+
+[[package]]
 name = "pyjwt"
 version = "2.13.0"
 source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
@@ -794,6 +834,35 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.1.1"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pytest/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pytest/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c" },
+]
+
+[[package]]
+name = "pytest-asyncio"
+version = "1.4.0"
+source = { registry = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/simple/" }
+dependencies = [
+    { name = "pytest" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pytest-asyncio/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42" }
+wheels = [
+    { url = "http://airlock-proxy.uplink.goog:999/python/artifact-foundry-prod/ah-3p-staging-python/pytest-asyncio/pytest_asyncio-1.4.0-py3-none-any.whl", hash = "sha256:933ca923a23075a87fb7070c0ec272a6848489824d887c85c812670932835aa1" },
 ]
 
 [[package]]
