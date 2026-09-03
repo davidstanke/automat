@@ -453,7 +453,13 @@ def _format_accommodation_summary(pref: dict[str, Any]) -> str | None:
         return None
 
     if pref_type == "allergy":
-        return f"{details.title()} allergy ({person})"
+        allergen = details
+        norm = allergen.lower()
+        if norm.endswith("ies"):
+            allergen = allergen[:-3] + ("Y" if allergen[-1].isupper() else "y")
+        elif norm.endswith("s") and not norm.endswith("ss"):
+            allergen = allergen[:-1]
+        return f"{allergen.title()} allergy ({person})"
     elif pref_type == "restriction":
         formatted_details = "-".join(part.capitalize() for part in details.split("-"))
         return f"{formatted_details} ({person})"
