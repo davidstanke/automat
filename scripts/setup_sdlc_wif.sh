@@ -90,8 +90,9 @@ else
   echo "Service account ${SA_NAME} already exists."
 fi
 
-# Grant Cloud Run Invoker to GitHub Actions SA
+# Grant Cloud Run Invoker and Vertex AI User to GitHub Actions SA
 bind_role "serviceAccount:${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" "run.invoker"
+bind_role "serviceAccount:${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" "aiplatform.user"
 
 # 4. Create/Verify Workload Identity Pool
 echo "[4/6] Configuring Workload Identity Pool (${POOL_NAME})..."

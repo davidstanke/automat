@@ -46,13 +46,26 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
-          id_token_audience: ${{ vars.IMPLEMENTER_SERVICE_URL }}
-          id_token_include_email: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Implementer Dependencies
+        run: |
+          uv pip install --system -r sdlc-agents/implementer/pyproject.toml
+
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Determine Spec Path and Branch
         id: params
@@ -62,8 +75,13 @@ jobs:
             BRANCH="${{ inputs.branch }}"
             CREATE_PR="${{ inputs.create_pr }}"
           else
-            # Find modified/added spec from git diff
-            SPEC_PATH=$(git diff --name-only HEAD~1 HEAD | grep -E '^docs/specs/.*\.md|^specs/.*/spec\.md' | head -n 1 || echo "")
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+            if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+              SPEC_PATH=$(git diff --name-only "$BEFORE" "$AFTER" | grep -E '^docs/specs/.*\.md|^specs/.*/spec\.md' | grep -v '^docs/specs/_' | head -n 1 || echo "")
+            else
+              SPEC_PATH=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -E '^docs/specs/.*\.md|^specs/.*/spec\.md' | grep -v '^docs/specs/_' | head -n 1 || echo "")
+            fi
             BRANCH="${GITHUB_REF_NAME}"
             CREATE_PR="true"
           fi
@@ -75,79 +93,89 @@ jobs:
           echo "spec_path=${SPEC_PATH}" >> "$GITHUB_OUTPUT"
           echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
           echo "create_pr=${CREATE_PR}" >> "$GITHUB_OUTPUT"
-          echo "Target Spec: ${SPEC_PATH}"
+          echo "Target Spec:   ${SPEC_PATH}"
           echo "Target Branch: ${BRANCH}"
+          echo "Create PR:     ${CREATE_PR}"
 
-      - name: Invoke Implementer Agent Service
+      - name: Run Implementer Agent
         env:
-          ID_TOKEN: ${{ steps.auth.outputs.id_token }}
-          SERVICE_URL: ${{ vars.IMPLEMENTER_SERVICE_URL }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          SPEC_PATH: ${{ steps.params.outputs.spec_path }}
-          BRANCH: ${{ steps.params.outputs.branch }}
-          CREATE_PR: ${{ steps.params.outputs.create_pr }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_GENAI_USE_VERTEXAI: "true"
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_GENAI_LOCATION: "global"
+          GOOGLE_GENAI_MODEL: ${{ vars.GOOGLE_GENAI_MODEL || 'gemini-3.8-flash' }}
         run: |
+          SPEC_PATH="${{ steps.params.outputs.spec_path }}"
+          BRANCH="${{ steps.params.outputs.branch }}"
+
           if [ -z "$SPEC_PATH" ]; then
             echo "Error: No specification path provided or detected."
             exit 1
           fi
 
           echo "============================================================"
-          echo " Invoking Implementer Agent on Cloud Run"
-          echo " Service URL: ${SERVICE_URL}"
-          echo " Spec Path:   ${SPEC_PATH}"
-          echo " Branch:      ${BRANCH}"
+          echo " Running Implementer Agent on GitHub Actions Worker"
+          echo " Spec Path:    ${SPEC_PATH}"
+          echo " Branch:       ${BRANCH}"
+          echo " Model:        ${GOOGLE_GENAI_MODEL}"
+          echo " GCP Project:  ${GOOGLE_CLOUD_PROJECT}"
+          echo " Location:     ${GOOGLE_GENAI_LOCATION}"
           echo "============================================================"
 
-          python3 - << 'PYEOF'
-          import json
-          import os
-          import sys
-          import urllib.request
-          import urllib.error
+          python3 sdlc-agents/implementer/main.py "${SPEC_PATH}" --branch "${BRANCH}"
 
-          service_url = os.environ.get("SERVICE_URL", "").rstrip("/")
-          id_token = os.environ.get("ID_TOKEN", "")
-          spec_path = os.environ.get("SPEC_PATH", "")
-          repo_url = os.environ.get("REPO_URL", "")
-          branch = os.environ.get("BRANCH", "")
-          github_token = os.environ.get("GITHUB_TOKEN", "")
-          create_pr = os.environ.get("CREATE_PR", "true").lower() == "true"
+      - name: Push Changes to Feature Branch
+        run: |
+          BRANCH="${{ steps.params.outputs.branch }}"
+          echo "Pushing committed changes to origin/${BRANCH}..."
+          git push origin "${BRANCH}"
 
-          url = f"{service_url}/tasks"
-          payload = {
-              "spec_path": spec_path,
-              "repo_url": repo_url,
-              "branch": branch,
-              "github_token": github_token,
-              "create_pr": create_pr,
-          }
+      - name: Open or Update Pull Request
+        if: steps.params.outputs.create_pr == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.params.outputs.branch }}
+          SPEC_PATH: ${{ steps.params.outputs.spec_path }}
+        run: |
+          FEATURE_NAME=$(basename "${SPEC_PATH}" .md)
+          PR_TITLE="feat(${FEATURE_NAME}): implement ${FEATURE_NAME}"
+          PR_BODY=$(cat << EOF
+          ## 🤖 SDLC Implementer Agent: ${FEATURE_NAME}
 
-          headers = {
-              "Authorization": f"Bearer {id_token}",
-              "Content-Type": "application/json",
-              "Accept": "text/event-stream",
-          }
+          Automated implementation and verification completed successfully on the GitHub Actions worker.
 
-          req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+          - **Specification**: \`${SPEC_PATH}\`
+          - **Feature Branch**: \`${BRANCH}\`
+          - **Base Branch**: \`main\`
+          - **Engine**: Antigravity SDK on Gemini 3.8 Global Vertex AI
 
-          try:
-              with urllib.request.urlopen(req, timeout=3600) as resp:
-                  for raw_line in resp:
-                      line = raw_line.decode("utf-8", errors="replace")
-                      if line.startswith("data: "):
-                          print(line[6:], end="", flush=True)
-                      elif line.startswith("data:"):
-                          print(line[5:], end="", flush=True)
-                      elif line.strip() and not line.startswith(":"):
-                          print(line, end="", flush=True)
-          except urllib.error.HTTPError as e:
-              err_msg = e.read().decode("utf-8", errors="replace")
-              print(f"HTTP Error {e.code}: {err_msg}", file=sys.stderr)
-              sys.exit(1)
-          except Exception as e:
-              print(f"Error invoking service: {e}", file=sys.stderr)
-              sys.exit(1)
-          PYEOF
+          ---
+          *Generated automatically by SDLC Implementer Agent (GitHub Actions Worker)*
+          EOF
+          )
+
+          EXISTING_PR=$(gh pr view "${BRANCH}" --json number,url 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING_PR" ]; then
+            PR_NUM=$(echo "$EXISTING_PR" | jq -r '.number')
+            PR_URL=$(echo "$EXISTING_PR" | jq -r '.url')
+            echo "Existing PR found: #${PR_NUM} (${PR_URL}). Updating..."
+
+            gh pr edit "${PR_NUM}" --title "${PR_TITLE}" --body "${PR_BODY}" || true
+            gh pr comment "${PR_NUM}" --body "🔄 **Implementer Agent Update**: Re-verified and pushed updated changes for \`${BRANCH}\`." || true
+            echo "Pull Request #${PR_NUM} updated successfully."
+          else
+            echo "Creating new Pull Request against main..."
+            PR_URL=$(gh pr create \
+              --base "main" \
+              --head "${BRANCH}" \
+              --title "${PR_TITLE}" \
+              --body "${PR_BODY}" \
+              --label "automated-pr,implementer" 2>&1 || \
+              gh pr create \
+              --base "main" \
+              --head "${BRANCH}" \
+              --title "${PR_TITLE}" \
+              --body "${PR_BODY}")
+            echo "Pull Request created: ${PR_URL}"
+          fi
 

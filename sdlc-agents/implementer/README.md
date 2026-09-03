@@ -45,7 +45,8 @@ In GitHub under **Settings > Secrets and variables > Actions > Variables**, add:
 
 ### Required IAM Roles
 Ensure the WIF Service Account (`WIF_SERVICE_ACCOUNT`) has:
-- `roles/run.invoker` on the Cloud Run service (or project level).
+- `roles/aiplatform.user` on the GCP project (for calling Vertex AI Gemini 3.8 models from the GitHub Actions worker).
+- `roles/run.invoker` on Cloud Run services (if invoking hosted agent services).
 
 ---
 

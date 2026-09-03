@@ -26,10 +26,20 @@ def parse_args():
         "spec_path",
         help="Path to the specification directory (e.g., specs/000-example) or spec.md file.",
     )
+    parser.add_argument(
+        "--branch",
+        default=None,
+        help="Target feature branch name.",
+    )
+    parser.add_argument(
+        "--base-branch",
+        default="main",
+        help="Target base branch (default: main).",
+    )
     return parser.parse_args()
 
 
-async def run_workflow(spec_path: str):
+async def run_workflow(spec_path: str, branch: str | None = None, base_branch: str = "main"):
     resolved_path = Path(spec_path).resolve()
     if resolved_path.is_dir():
         spec_file = resolved_path / "spec.md"
@@ -45,21 +55,41 @@ async def run_workflow(spec_path: str):
 
     print("==================================================")
     print(f" Starting Implementer Pipeline for: {target_path}")
+    if branch:
+        print(f" Target Branch: {branch}")
     print("==================================================")
 
-    async for event in run_implementer_pipeline({"spec_path": target_path}):
-        text = str(event)
-        if text:
-            print(text, flush=True)
+    payload = {
+        "spec_path": target_path,
+        "branch": branch,
+        "base_branch": base_branch,
+    }
+
+    final_status = "completed"
+    try:
+        async for event in run_implementer_pipeline(payload):
+            text = str(event)
+            if text:
+                print(text, flush=True)
+            if hasattr(event, "output") and isinstance(event.output, dict):
+                if "status" in event.output:
+                    final_status = event.output["status"]
+    except Exception as e:
+        print(f"\n❌ Pipeline execution encountered an unhandled exception: {e}", file=sys.stderr)
+        sys.exit(1)
 
     print("\n==================================================")
-    print(" Pipeline execution completed.")
+    print(f" Pipeline execution finished with status: {final_status.upper()}")
     print("==================================================")
+
+    if final_status == "blocked":
+        print("❌ Execution was blocked due to task verification failure.", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
     args = parse_args()
-    asyncio.run(run_workflow(args.spec_path))
+    asyncio.run(run_workflow(args.spec_path, branch=args.branch, base_branch=args.base_branch))
 
 
 if __name__ == "__main__":
