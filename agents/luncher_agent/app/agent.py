@@ -102,6 +102,7 @@ def discover_sub_agent(
     default_local_url: str,
     description: str,
     app_name: str = "app",
+    timeout: float | None = None,
 ) -> RemoteA2aAgent:
     """Instantiates a RemoteA2aAgent using Agent Runtime Engine ID, URL, or local fallback.
 
@@ -111,6 +112,9 @@ def discover_sub_agent(
     2. Direct URL env vars: {AGENT_NAME}_URL, {AGENT_NAME}_AGENT_URL.
     3. Falls back to default_local_url for local offline development.
     """
+    if timeout is None:
+        timeout = 10.0 if "cater" in agent_name.lower() else 120.0
+
     name_upper = agent_name.upper()
     stem = name_upper.replace("_AGENT", "")
     stems = [stem]
@@ -189,12 +193,12 @@ def discover_sub_agent(
         # ADC under Agent Identity, so the request goes through the genai
         # client's transport instead -- see app_utils.genai_transport.
         client = httpx.AsyncClient(
-            transport=GenaiApiTransport.from_url(agent_url), timeout=120.0
+            transport=GenaiApiTransport.from_url(agent_url), timeout=timeout
         )
         logger.info("  '%s' authenticates via GenaiApiTransport", agent_name)
     else:
         # Local development unauthenticated client
-        client = httpx.AsyncClient(timeout=120.0)
+        client = httpx.AsyncClient(timeout=timeout)
         logger.info("  '%s' uses local unauthenticated transport", agent_name)
 
     return RemoteA2aAgent(
@@ -202,11 +206,11 @@ def discover_sub_agent(
         description=description,
         agent_card=agent_url,
         httpx_client=client,
-        timeout=120.0,
+        timeout=timeout,
     )
 
 
-# Discover sub-agents (Strategy Agent and Scheduling Agent)
+# Discover sub-agents (Strategy Agent, Scheduling Agent, and Catering Agent)
 strategy_agent = discover_sub_agent(
     agent_name="strategy_agent",
     default_local_url="http://localhost:8081/a2a/app/.well-known/agent-card.json",
@@ -224,6 +228,15 @@ scheduling_agent = discover_sub_agent(
     ),
 )
 
+catering_agent = discover_sub_agent(
+    agent_name="catering_agent",
+    default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+    description=(
+        "Curates distinct thematic 4-course catering menus and records team dietary preferences, allergies, and restrictions."
+    ),
+    timeout=10.0,
+)
+
 default_retry_policy = HttpRetryOptions(
     attempts=5,
     initial_delay=2.0,
@@ -231,9 +244,36 @@ default_retry_policy = HttpRetryOptions(
     http_status_codes=[429, 500, 503],
 )
 
+
+def format_dietary_preference_confirmation(
+    person: str,
+    details: str,
+    pref_type: str = "restriction",
+    **kwargs: Any,
+) -> str:
+    """Formats the standardized confirmation message for saved dietary preferences."""
+    actual_type = kwargs.get("type", pref_type)
+    return (
+        f"Saved dietary preference for {person}: {details} ({actual_type}). "
+        "This will be applied to all future lunch recommendations.\n\n"
+        "Would you like to plan a team lunch now?"
+    )
+
+
 class IntentClassification(BaseModel):
-    intent: Literal["plan", "book"] = Field(
-        description="The classified intent: 'plan' for planning/finding lunch times, 'book' for selecting/booking a specific slot."
+    intent: Literal["plan", "book", "dietary_preference", "plan_with_preference"] = Field(
+        description=(
+            "The classified intent: 'plan' for general lunch planning, 'book' for selecting/booking a slot, "
+            "'dietary_preference' for saving/updating dietary constraints without planning, "
+            "or 'plan_with_preference' for planning while also providing dietary constraints."
+        )
+    )
+    preference_updates: list[dict[str, str]] = Field(
+        default_factory=list,
+        description=(
+            "List of dietary preferences mentioned in the prompt, each with "
+            "'person', 'details', and 'type' (e.g. allergy, restriction, dislike, like)."
+        ),
     )
 
 
@@ -251,7 +291,7 @@ def _extract_text_from_input(content: Any) -> str:
 
 @node(name="intent_router")
 async def intent_router(ctx: Context, node_input: Any) -> Event:
-    """Routes user messages between the planning and booking branches."""
+    """Routes user messages between planning, booking, and dietary preference branches."""
     user_prompt = _extract_text_from_input(node_input)
     if not user_prompt.strip():
         return Event(output=node_input, route="plan")
@@ -264,9 +304,13 @@ async def intent_router(ctx: Context, node_input: Any) -> Event:
             config=types.GenerateContentConfig(
                 system_instruction=(
                     "You are an intent router for a team lunch coordination system. "
-                    "Classify the user message into one of two intents:\n"
+                    "Classify the user message into one of four intents:\n"
                     "- 'plan': The user wants to plan, schedule, coordinate, or find options for a team lunch.\n"
                     "- 'book': The user wants to select, confirm, or book a specific slot or proposal.\n"
+                    "- 'dietary_preference': The user is solely stating, recording, or updating dietary preferences, "
+                    "allergies, likes, or dislikes for team members without requesting lunch planning or booking.\n"
+                    "- 'plan_with_preference': The user is requesting to plan or schedule a lunch while also providing "
+                    "dietary preferences or restrictions in the same turn.\n"
                     "Default to 'plan' if ambiguous or general chat."
                 ),
                 response_mime_type="application/json",
@@ -276,9 +320,59 @@ async def intent_router(ctx: Context, node_input: Any) -> Event:
         parsed = IntentClassification.model_validate_json(response.text)
         route = parsed.intent
     except Exception as e:
-        logger.warning("Intent router LLM failed, defaulting to 'plan': %s", e)
+        logger.warning("Intent router LLM failed, using fallback heuristic: %s", e)
         lower = user_prompt.lower().strip()
-        if lower.startswith(("book", "confirm", "reserve", "choose", "select")):
+        booking_keywords = ("book", "confirm", "reserve", "choose", "select")
+        dietary_keywords = (
+            "allergic",
+            "allergy",
+            "allergies",
+            "vegetarian",
+            "vegan",
+            "gluten",
+            "dairy",
+            "cannot eat",
+            "can't eat",
+            "dietary",
+            "restriction",
+            "restrictions",
+            "celiac",
+            "peanut",
+            "peanuts",
+            "shellfish",
+            "lactose",
+            "halal",
+            "kosher",
+        )
+        planning_keywords = (
+            "plan",
+            "schedule",
+            "lunch",
+            "organize",
+            "meeting",
+            "meet",
+            "coordinate",
+            "options",
+            "friday",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "tomorrow",
+            "next week",
+        )
+
+        has_booking = lower.startswith(booking_keywords) or any(
+            f" {k} " in lower for k in booking_keywords
+        )
+        has_dietary = any(k in lower for k in dietary_keywords)
+        has_planning = any(k in lower for k in planning_keywords)
+
+        if has_dietary and has_planning:
+            route = "plan_with_preference"
+        elif has_dietary:
+            route = "dietary_preference"
+        elif has_booking:
             route = "book"
         else:
             route = "plan"
@@ -294,6 +388,23 @@ async def booking_handler(ctx: Context, node_input: Any) -> Any:
         node_input=node_input,
         use_as_output=True,
     )
+
+
+@node(name="dietary_preference_handler", rerun_on_resume=True)
+async def dietary_preference_handler(ctx: Context, node_input: Any) -> Any:
+    """Delegates dietary preference persistence directly to catering_agent."""
+    return await ctx.run_node(
+        catering_agent,
+        node_input=node_input,
+        use_as_output=True,
+    )
+
+
+@node(name="persist_preference_handler", rerun_on_resume=True)
+async def persist_preference_handler(ctx: Context, node_input: Any) -> Any:
+    """Persists dietary preference updates via catering_agent before planning."""
+    await ctx.run_node(catering_agent, node_input=node_input)
+    return node_input
 
 
 # Proposal Synthesizer: synthesize corporate strategy and schedule into a structured Markdown proposal
@@ -324,11 +435,14 @@ luncher_agent = Workflow(
         (
             intent_router,
             {
-                "plan": (strategy_agent, scheduling_agent),
+                "plan": (strategy_agent, scheduling_agent, catering_agent),
                 "book": booking_handler,
+                "dietary_preference": dietary_preference_handler,
+                "plan_with_preference": persist_preference_handler,
             },
         ),
-        ((strategy_agent, scheduling_agent), join_info_gatherer),
+        (persist_preference_handler, (strategy_agent, scheduling_agent, catering_agent)),
+        ((strategy_agent, scheduling_agent, catering_agent), join_info_gatherer),
         (join_info_gatherer, synthesizer_agent),
     ],
 )
