@@ -1,0 +1,182 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "scenario_1_standard_lunch_thematic_menus",
+      "input": "Plan a standard team lunch for next Tuesday with 3 thematic 4-course catering menus.",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Plan a standard team lunch for next Tuesday with 3 thematic 4-course catering menus."
+          }
+        ]
+      },
+      "context": {
+        "scenario": "standard_lunch_request",
+        "description": "Standard lunch request expecting 3 thematic menus with 4 courses each.",
+        "allergies": [],
+        "preferences": []
+      },
+      "expected_output_patterns": [
+        "Proposed Catering Menus",
+        "Menu 1",
+        "Menu 2",
+        "Menu 3",
+        "Mains",
+        "Sides",
+        "Beverages",
+        "Desserts"
+      ],
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A standard team lunch proposal presenting 3 distinct thematic catering menus, each structured with 4 courses: mains, sides, beverages, and desserts."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "scenario_2_dietary_filtering_active_allergies",
+      "input": "Plan a team lunch for next Wednesday. Note that Alice has a peanut allergy, Bob is vegetarian, and Charlie is allergic to shellfish.",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Plan a team lunch for next Wednesday. Note that Alice has a peanut allergy, Bob is vegetarian, and Charlie is allergic to shellfish."
+          }
+        ]
+      },
+      "context": {
+        "scenario": "dietary_filtering_active_allergies",
+        "description": "Active allergies (peanut, shellfish, vegetarian) expecting allergen exclusion and explicit filtering notes.",
+        "allergies": [
+          "peanut",
+          "shellfish"
+        ],
+        "preferences": [
+          "vegetarian"
+        ]
+      },
+      "expected_output_patterns": [
+        "Filtered to accommodate: Peanut allergy (Alice), Vegetarian (Bob), Shellfish allergy (Charlie)",
+        "Dietary Accommodations"
+      ],
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A lunch proposal completely excluding peanut and shellfish items, offering vegetarian options, and appending explicit dietary accommodation notes: 'Filtered to accommodate: Peanut allergy (Alice), Vegetarian (Bob), Shellfish allergy (Charlie)'."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "scenario_3_pure_dietary_preference_update",
+      "input": "Dave cannot eat gluten due to celiac disease. Please save this dietary preference for future lunch planning.",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Dave cannot eat gluten due to celiac disease. Please save this dietary preference for future lunch planning."
+          }
+        ]
+      },
+      "context": {
+        "scenario": "pure_dietary_preference_update",
+        "description": "Pure dietary update expecting confirmation and no meeting proposal.",
+        "allergies": [
+          "gluten",
+          "celiac"
+        ],
+        "preferences": []
+      },
+      "expected_output_patterns": [
+        "Saved dietary preference for Dave: gluten allergy",
+        "Saved dietary preference"
+      ],
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Saved dietary preference for Dave: gluten allergy (celiac disease). This will be applied to all future lunch recommendations without creating any meeting booking or proposal."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "scenario_4_booking_with_catering_confirmation",
+      "input": "Book Tuesday 12:00-13:00 with Menu 1: Baja Fiesta.",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Book Tuesday 12:00-13:00 with Menu 1: Baja Fiesta."
+          }
+        ]
+      },
+      "context": {
+        "scenario": "booking_with_catering_confirmation",
+        "description": "Booking with catering selection expecting booking ID and catering summary.",
+        "selected_slot": "Tuesday 12:00-13:00",
+        "catering_menu": "Baja Fiesta"
+      },
+      "expected_output_patterns": [
+        "bk_",
+        "Booking ID",
+        "Catering Menu",
+        "Baja Fiesta",
+        "Tuesday 12:00-13:00"
+      ],
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Booking confirmed with unique booking ID bk_1700000000_a1b2c3, slot Tuesday 12:00-13:00, and catering summary for Baja Fiesta."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "scenario_5_offline_local_mcp_fallback",
+      "input": "Plan lunch for Thursday in offline local fallback mode when BigQuery MCP server is unavailable.",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Plan lunch for Thursday in offline local fallback mode when BigQuery MCP server is unavailable."
+          }
+        ]
+      },
+      "context": {
+        "scenario": "offline_local_dataset_fallback",
+        "description": "Offline local fallback when BigQuery MCP is unavailable.",
+        "mcp_available": false
+      },
+      "expected_output_patterns": [
+        "Proposed Catering Menus",
+        "Menu 1",
+        "Menu 2",
+        "Menu 3"
+      ],
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "A lunch proposal successfully generated using local catering dataset fallback while offline without BigQuery MCP, presenting 3 complete 4-course menus."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

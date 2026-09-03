@@ -1,6 +1,8 @@
 metrics_to_run:
   - tool_trajectory
   - custom_response_quality
+  - dietary_filtering
+  - menu_structure_compliance
 
 custom_metrics:
   # Deterministic. The synthesizer must call format_lunch_proposal exactly once.
@@ -20,8 +22,17 @@ custom_metrics:
   - name: custom_response_quality
     custom_function_file: response_quality.py
 
+  # Deterministic catering dietary safety and accommodation evaluator
+  - name: dietary_filtering
+    custom_function_file: catering_eval.py
+
+  # Deterministic catering 3-menu 4-course structure compliance evaluator
+  - name: menu_structure_compliance
+    custom_function_file: catering_eval.py
+
   - name: agent_turn_count
     custom_function: |
       def evaluate(instance):
           turns = (instance.get("agent_data") or {}).get("turns", [])
           return {'score': len(turns)}
+
