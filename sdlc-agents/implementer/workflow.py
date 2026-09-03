@@ -166,7 +166,7 @@ async def branch_init_node(ctx: Any, node_input: Any) -> AsyncIterator[PipelineE
     github_token = payload.get("github_token")
     create_pr = payload.get("create_pr", True)
 
-    clean_path_str = raw_spec_path.strip().strip("`").strip("'").strip('"').lstrip("/")
+    clean_path_str = raw_spec_path.strip().strip("`").strip("'").strip('"')
 
     workspace_dir = None
 
@@ -210,13 +210,20 @@ async def branch_init_node(ctx: Any, node_input: Any) -> AsyncIterator[PipelineE
         except Exception as e:
             print(f"[Workflow: branch_init] os.chdir error: {e}")
 
-        input_path = (workspace_dir / clean_path_str).resolve()
+        rel_path = clean_path_str.lstrip("/")
+        input_path = (workspace_dir / rel_path).resolve()
     else:
         # Local execution mode
         workspace_dir = repo_root
-        input_path = Path(clean_path_str).resolve()
-        if not input_path.is_absolute() or not input_path.exists():
-            input_path = (repo_root / clean_path_str).resolve()
+        candidate = Path(clean_path_str)
+        if candidate.is_absolute() and candidate.exists():
+            input_path = candidate.resolve()
+        elif (repo_root / clean_path_str.lstrip("/")).exists():
+            input_path = (repo_root / clean_path_str.lstrip("/")).resolve()
+        elif candidate.resolve().exists():
+            input_path = candidate.resolve()
+        else:
+            input_path = (repo_root / clean_path_str.lstrip("/")).resolve()
 
     # Resolve spec directory path and file
     if input_path.is_file():

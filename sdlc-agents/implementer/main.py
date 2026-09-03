@@ -40,17 +40,26 @@ def parse_args():
 
 
 async def run_workflow(spec_path: str, branch: str | None = None, base_branch: str = "main"):
-    resolved_path = Path(spec_path).resolve()
-    if resolved_path.is_dir():
+    path_obj = Path(spec_path)
+    if path_obj.exists():
+        resolved_path = path_obj.resolve()
+    elif (repo_root / spec_path.lstrip("/")).exists():
+        resolved_path = (repo_root / spec_path.lstrip("/")).resolve()
+    else:
+        resolved_path = path_obj.resolve()
+
+    if resolved_path.is_file():
+        target_path = str(resolved_path)
+    elif resolved_path.is_dir():
         spec_file = resolved_path / "spec.md"
         if not spec_file.exists():
-            print(f"Error: No spec.md found in directory: {resolved_path}", file=sys.stderr)
-            sys.exit(1)
+            md_files = [f for f in resolved_path.glob("*.md") if f.name != "README.md"]
+            if not md_files:
+                print(f"Error: No specification markdown file found in directory: {resolved_path}", file=sys.stderr)
+                sys.exit(1)
         target_path = str(resolved_path)
-    elif resolved_path.is_file():
-        target_path = str(resolved_path.parent)
     else:
-        print(f"Error: Path does not exist: {resolved_path}", file=sys.stderr)
+        print(f"Error: Path does not exist: {spec_path} (resolved to {resolved_path})", file=sys.stderr)
         sys.exit(1)
 
     print("==================================================")
