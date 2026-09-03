@@ -85,7 +85,7 @@ async def agent_card() -> Dict[str, Any]:
         "name": "implementer_agent",
         "description": "Automated SDLC Feature Implementer Agent (Antigravity SDK)",
         "version": "0.2.0",
-        "capabilities": ["sdlc", "code-generation", "testing", "decomposition"],
+        "capabilities": ["sdlc", "code-generation", "single-shot-implementation"],
         "endpoints": {
             "a2a": "/a2a/implementer_agent",
             "health": "/healthz",

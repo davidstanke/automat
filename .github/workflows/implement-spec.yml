@@ -36,7 +36,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
       - name: Authenticate to Google Cloud via WIF
         id: auth
@@ -144,7 +144,7 @@ jobs:
           - **Specification**: \`${SPEC_PATH}\`
           - **Feature Branch**: \`${BRANCH}\`
           - **Base Branch**: \`main\`
-          - **Engine**: Antigravity SDK on Gemini 3.8 Global Vertex AI
+          - **Engine**: Antigravity Single-Shot Implementer on Gemini 3.7 Flash Vertex AI
 
           ---
           *Generated automatically by SDLC Implementer Agent (GitHub Actions Worker)*

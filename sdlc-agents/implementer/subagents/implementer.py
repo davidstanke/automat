@@ -1,9 +1,19 @@
 import os
-from google.antigravity import Agent, LocalAgentConfig, types
-from google.antigravity.hooks import policy
+from typing import Any
+
+try:
+    from google.antigravity import Agent, LocalAgentConfig, types
+    from google.antigravity.hooks import policy
+except ImportError:
+    Agent = None
+    LocalAgentConfig = None
+    types = None
+    policy = None
+
 from . import load_prompt
 
-def get_test_writer_config() -> LocalAgentConfig:
+
+def get_implementer_config() -> Any:
     use_vertex = (
         os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
         or bool(os.environ.get("GOOGLE_CLOUD_PROJECT"))
@@ -13,8 +23,11 @@ def get_test_writer_config() -> LocalAgentConfig:
     model_name = os.environ.get("GOOGLE_GENAI_MODEL", "gemini-3.7-flash")
     api_key = os.environ.get("GEMINI_API_KEY")
 
+    if LocalAgentConfig is None or types is None or policy is None:
+        return None
+
     return LocalAgentConfig(
-        system_instructions=load_prompt("test_writer"),
+        system_instructions=load_prompt("single_shot_implementer"),
         capabilities=types.CapabilitiesConfig(
             agent_behavior=types.AgentBehavior.AUTONOMOUS,
         ),
@@ -30,5 +43,8 @@ def get_test_writer_config() -> LocalAgentConfig:
         api_key=api_key,
     )
 
-def create_test_writer_agent() -> Agent:
-    return Agent(config=get_test_writer_config())
+
+def create_implementer_agent() -> Any:
+    if Agent is None:
+        raise RuntimeError("google-antigravity SDK is not available in current environment.")
+    return Agent(config=get_implementer_config())
