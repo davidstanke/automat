@@ -7,8 +7,6 @@ on:
       - '!docs/specs/_implemented/**'
       - '!docs/specs/_samples/**'
       - 'specs/**/spec.md'
-    branches:
-      - 'feature/**'
   workflow_dispatch:
     inputs:
       spec_path:
