@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: review-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   review-pr:
     name: Run Reviewer Agent Council
@@ -32,84 +36,72 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
-          id_token_audience: ${{ vars.REVIEWER_SERVICE_URL }}
-          id_token_include_email: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Determine PR Number
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Reviewer Dependencies
+        run: |
+          uv pip install --system -r sdlc-agents/reviewer/pyproject.toml
+
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine PR Parameters
         id: params
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PR_NUM="${{ inputs.pr_number }}"
+            HEAD_SHA=""
+            BASE_BRANCH="main"
           else
             PR_NUM="${{ github.event.pull_request.number }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
           fi
           echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "base_branch=${BASE_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "Target PR Number: #${PR_NUM}"
+          echo "Base Branch:      ${BASE_BRANCH}"
+          echo "Head SHA:         ${HEAD_SHA}"
 
-      - name: Invoke Reviewer Agent Service
+      - name: Run Reviewer Agent
         env:
-          ID_TOKEN: ${{ steps.auth.outputs.id_token }}
-          SERVICE_URL: ${{ vars.REVIEWER_SERVICE_URL }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          PR_NUMBER: ${{ steps.params.outputs.pr_number }}
+          GOOGLE_GENAI_USE_VERTEXAI: "true"
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_GENAI_LOCATION: "global"
+          GOOGLE_GENAI_MODEL: ${{ vars.GOOGLE_GENAI_MODEL || 'gemini-3.8-flash' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
+          PR_NUM="${{ steps.params.outputs.pr_number }}"
+          HEAD_SHA="${{ steps.params.outputs.head_sha }}"
+          BASE_BRANCH="${{ steps.params.outputs.base_branch }}"
+
           echo "============================================================"
-          echo " Invoking Reviewer Agent Council on Cloud Run"
-          echo " Service URL: ${SERVICE_URL}"
-          echo " PR Number:   #${PR_NUMBER}"
-          echo " Repo URL:    ${REPO_URL}"
+          echo " Running Reviewer Agent Council on GitHub Actions Worker"
+          echo " PR Number:    #${PR_NUM}"
+          echo " Base Branch:  ${BASE_BRANCH}"
+          echo " Head SHA:     ${HEAD_SHA}"
+          echo " Model:        ${GOOGLE_GENAI_MODEL}"
+          echo " GCP Project:  ${GOOGLE_CLOUD_PROJECT}"
+          echo " Location:     ${GOOGLE_GENAI_LOCATION}"
           echo "============================================================"
 
-          python3 - << 'PYEOF'
-          import json
-          import os
-          import sys
-          import urllib.request
-          import urllib.error
+          python3 sdlc-agents/reviewer/main.py \
+            --pr "${PR_NUM}" \
+            --base-branch "${BASE_BRANCH}" \
+            --head-sha "${HEAD_SHA}" \
+            --workspace-dir "${GITHUB_WORKSPACE}"
 
-          service_url = os.environ.get("SERVICE_URL", "").rstrip("/")
-          id_token = os.environ.get("ID_TOKEN", "")
-          repo_url = os.environ.get("REPO_URL", "")
-          pr_num_str = os.environ.get("PR_NUMBER", "")
-          pr_number = int(pr_num_str) if pr_num_str.isdigit() else pr_num_str
-          github_token = os.environ.get("GITHUB_TOKEN", "")
-
-          url = f"{service_url}/tasks"
-          payload = {
-              "pr_number": pr_number,
-              "repo_url": repo_url,
-              "github_token": github_token,
-          }
-
-          headers = {
-              "Authorization": f"Bearer {id_token}",
-              "Content-Type": "application/json",
-              "Accept": "text/event-stream",
-          }
-
-          req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-
-          try:
-              with urllib.request.urlopen(req, timeout=3600) as resp:
-                  for raw_line in resp:
-                      line = raw_line.decode("utf-8", errors="replace")
-                      if line.startswith("data: "):
-                          print(line[6:], end="", flush=True)
-                      elif line.startswith("data:"):
-                          print(line[5:], end="", flush=True)
-                      elif line.strip() and not line.startswith(":"):
-                          print(line, end="", flush=True)
-          except urllib.error.HTTPError as e:
-              err_msg = e.read().decode("utf-8", errors="replace")
-              print(f"HTTP Error {e.code}: {err_msg}", file=sys.stderr)
-              sys.exit(1)
-          except Exception as e:
-              print(f"Error invoking service: {e}", file=sys.stderr)
-              sys.exit(1)
-          PYEOF

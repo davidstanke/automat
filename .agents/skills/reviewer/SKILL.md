@@ -43,7 +43,12 @@ flowchart TD
 
 ## Invocation
 
-### Via CLI Client:
+### Direct In-Process CLI (GitHub Actions / Local):
+```bash
+python3 sdlc-agents/reviewer/main.py --pr <PR_NUMBER> --base-branch main --workspace-dir .
+```
+
+### Via Sidecar / Remote Server Client:
 ```bash
 sdlc-agents/.venv/bin/python sdlc-agents/reviewer/client.py --pr <PR_NUMBER> --repo-url <REPO_URL> --github-token <GITHUB_TOKEN>
 ```

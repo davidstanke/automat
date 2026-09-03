@@ -50,6 +50,7 @@ EXCLUDED_PATTERNS = [
     r"uv\.lock$",
     r"yarn\.lock$",
     r"pnpm-lock\.yaml$",
+    r"poetry\.lock$",
     r"\.min\.(js|css)$",
     r"dist/.*",
     r"build/.*",
@@ -60,6 +61,7 @@ EXCLUDED_PATTERNS = [
     r"\.git/.*",
     r"\.scratch/.*",
     r"tsconfig\.tsbuildinfo$",
+    r"\.(png|jpg|jpeg|gif|webp|ico|svg|pdf|mp4|zip|tar|gz)$",
 ]
 
 
@@ -100,12 +102,16 @@ def _parse_request_payload(node_input: Any) -> Dict[str, Any]:
 
 
 def _extract_owner_repo(repo_url: str) -> tuple[Optional[str], Optional[str]]:
-    """Extracts owner and repo name from GitHub URL."""
+    """Extracts owner and repo name from GitHub URL (HTTPS or SSH)."""
     if not repo_url:
         return None, None
     clean = repo_url.rstrip("/").rstrip(".git")
     if "github.com/" in clean:
         parts = clean.split("github.com/")[-1].split("/")
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+    if "github.com:" in clean:
+        parts = clean.split("github.com:")[-1].split("/")
         if len(parts) >= 2:
             return parts[0], parts[1]
     return None, None
@@ -131,8 +137,45 @@ async def fetch_pr_node(ctx: Context, node_input: Any) -> AsyncIterator[Event]:
     head_sha = ""
     pr_title = ""
     pr_body = ""
+    workspace_dir_arg = payload.get("workspace_dir")
+    head_sha_arg = payload.get("head_sha")
 
-    if repo_url and github_token:
+    # 1. If pre-checked-out workspace_dir provided (e.g. from GitHub Actions worker)
+    if workspace_dir_arg and Path(workspace_dir_arg).is_dir() and (Path(workspace_dir_arg) / ".git").exists():
+        workspace_dir = Path(workspace_dir_arg).resolve()
+        if head_sha_arg:
+            head_sha = head_sha_arg
+        else:
+            sha_proc = await asyncio.create_subprocess_exec(
+                "git", "rev-parse", "HEAD",
+                cwd=str(workspace_dir),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            sha_out, _ = await sha_proc.communicate()
+            head_sha = sha_out.decode().strip()
+
+        # Try to get PR metadata from GitHub API if available
+        owner, repo = _extract_owner_repo(repo_url)
+        if owner and repo and pr_number and github_token:
+            api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+            headers = {
+                "Authorization": f"Bearer {github_token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "SDLC-Reviewer-Agent"
+            }
+            try:
+                req = urllib.request.Request(api_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    pr_data = json.loads(resp.read().decode())
+                    pr_title = pr_data.get("title", "")
+                    pr_body = pr_data.get("body", "")
+                    if not head_sha and "head" in pr_data and "sha" in pr_data["head"]:
+                        head_sha = pr_data["head"]["sha"]
+            except Exception as e:
+                print(f"[Workflow: fetch_pr] GitHub API fetch error: {e}")
+
+    # 2. Otherwise clone repository if remote credentials provided (Cloud Run mode)
+    elif repo_url and github_token:
         workspace_dir = Path(tempfile.mkdtemp(prefix="reviewer_ws_"))
         auth_url = repo_url
         if repo_url.startswith("https://"):
@@ -196,7 +239,7 @@ async def fetch_pr_node(ctx: Context, node_input: Any) -> AsyncIterator[Event]:
             except Exception as e:
                 print(f"[Workflow: fetch_pr] GitHub API fetch error: {e}")
     else:
-        # Local execution mode
+        # Local execution mode fallback
         workspace_dir = repo_root
         sha_proc = await asyncio.create_subprocess_exec(
             "git", "rev-parse", "HEAD",
@@ -206,24 +249,34 @@ async def fetch_pr_node(ctx: Context, node_input: Any) -> AsyncIterator[Event]:
         sha_out, _ = await sha_proc.communicate()
         head_sha = sha_out.decode().strip()
 
-    # Get list of changed files
-    diff_name_proc = await asyncio.create_subprocess_exec(
-        "git", "diff", "--name-only", f"origin/{base_branch}...HEAD",
-        cwd=str(workspace_dir),
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    diff_name_out, _ = await diff_name_proc.communicate()
-    raw_files = [f.strip() for f in diff_name_out.decode().splitlines() if f.strip()]
+    # Determine diff reference and get list of changed files
+    diff_ref = None
+    raw_files = []
+    candidates = []
+    if head_sha:
+        candidates.append(f"origin/{base_branch}...{head_sha}")
+        candidates.append(f"{base_branch}...{head_sha}")
+    candidates.extend([
+        f"origin/{base_branch}...HEAD",
+        f"{base_branch}...HEAD",
+        "HEAD~1...HEAD",
+    ])
 
-    # Fallback to local base_branch...HEAD if origin/{base_branch} fails
-    if not raw_files:
-        diff_name_proc2 = await asyncio.create_subprocess_exec(
-            "git", "diff", "--name-only", f"{base_branch}...HEAD",
+    for candidate in candidates:
+        diff_name_proc = await asyncio.create_subprocess_exec(
+            "git", "diff", "--name-only", candidate,
             cwd=str(workspace_dir),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        diff_name_out2, _ = await diff_name_proc2.communicate()
-        raw_files = [f.strip() for f in diff_name_out2.decode().splitlines() if f.strip()]
+        diff_name_out, _ = await diff_name_proc.communicate()
+        cand_files = [f.strip() for f in diff_name_out.decode().splitlines() if f.strip()]
+        if cand_files:
+            raw_files = cand_files
+            diff_ref = candidate
+            break
+
+    if not diff_ref:
+        diff_ref = f"origin/{base_branch}...HEAD"
 
     # Filter out lock files and binary/build artifacts
     filtered_files = [f for f in raw_files if not _is_excluded(f)]
@@ -246,7 +299,7 @@ async def fetch_pr_node(ctx: Context, node_input: Any) -> AsyncIterator[Event]:
     for file_path in filtered_files:
         # Get diff for file
         diff_proc = await asyncio.create_subprocess_exec(
-            "git", "diff", f"origin/{base_branch}...HEAD", "--", file_path,
+            "git", "diff", diff_ref, "--", file_path,
             cwd=str(workspace_dir),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -537,9 +590,13 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
                 "User-Agent": "SDLC-Reviewer-Agent"
             }
 
+            verdict = synthesis.get("verdict", "COMMENT")
+            if verdict not in ("APPROVE", "COMMENT", "REQUEST_CHANGES"):
+                verdict = "COMMENT"
+
             review_payload = {
                 "body": summary_md,
-                "event": "COMMENT",
+                "event": verdict,
             }
             if head_sha:
                 review_payload["commit_id"] = head_sha
@@ -547,6 +604,7 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
                 review_payload["comments"] = review_comments
 
             # Attempt submission
+            fallback_needed = False
             try:
                 data_bytes = json.dumps(review_payload).encode("utf-8")
                 req = urllib.request.Request(api_url, data=data_bytes, headers=headers, method="POST")
@@ -557,24 +615,50 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
                         yield Event(
                             content=types.Content(
                                 role="model",
-                                parts=[types.Part.from_text(text=f"[Publisher] ✅ Successfully submitted review with {comments_posted_count} inline comment(s).")]
+                                parts=[types.Part.from_text(text=f"[Publisher] ✅ Successfully submitted review ({verdict}) with {comments_posted_count} inline comment(s).")]
                             )
                         )
             except urllib.error.HTTPError as e:
                 err_body = e.read().decode("utf-8", errors="replace")
-                print(f"[Workflow: publish_review] Primary review post failed HTTP {e.code}: {err_body}")
+                print(f"[Workflow: publish_review] Primary review post ({verdict}) failed HTTP {e.code}: {err_body}")
+                fallback_needed = True
 
-                # If inline comments caused 422 line mismatch, fallback to top-level review comment with inline suggestions appended
-                if review_comments:
-                    yield Event(
-                        content=types.Content(
-                            role="model",
-                            parts=[types.Part.from_text(text="[Publisher] ⚠️ Notice: Specific line ranges in diff varied; falling back to unified review comment...")]
-                        )
+            # If primary review failed (e.g. self-approval error 422 or line range mismatch), try fallbacks
+            if fallback_needed:
+                yield Event(
+                    content=types.Content(
+                        role="model",
+                        parts=[types.Part.from_text(text=f"[Publisher] ⚠️ Notice: Submission with verdict '{verdict}' was rejected; falling back to COMMENT mode...")]
                     )
-                    augmented_summary = summary_md + "\n\n### 📝 Line-Specific Suggestions\n"
-                    for c in review_comments:
-                        augmented_summary += f"\n- **`{c['path']}:{c['line']}`**:\n{c['body']}\n"
+                )
+
+                # 1. First fallback: retry with event='COMMENT' and inline comments
+                if verdict != "COMMENT" and review_comments:
+                    try:
+                        retry_payload = dict(review_payload)
+                        retry_payload["event"] = "COMMENT"
+                        data_bytes = json.dumps(retry_payload).encode("utf-8")
+                        req_retry = urllib.request.Request(api_url, data=data_bytes, headers=headers, method="POST")
+                        with urllib.request.urlopen(req_retry, timeout=15) as resp_retry:
+                            if resp_retry.status in (200, 201):
+                                published = True
+                                comments_posted_count = len(review_comments)
+                                yield Event(
+                                    content=types.Content(
+                                        role="model",
+                                        parts=[types.Part.from_text(text=f"[Publisher] ✅ Successfully submitted review as COMMENT with {comments_posted_count} inline comment(s).")]
+                                    )
+                                )
+                    except Exception as e_retry:
+                        print(f"[Workflow: publish_review] Retry with COMMENT and inline comments failed: {e_retry}")
+
+                # 2. Second fallback: top-level review comment with inline suggestions appended in body
+                if not published:
+                    augmented_summary = summary_md
+                    if review_comments:
+                        augmented_summary += "\n\n### 📝 Line-Specific Suggestions\n"
+                        for c in review_comments:
+                            augmented_summary += f"\n- **`{c['path']}:{c['line']}`**:\n{c['body']}\n"
 
                     fallback_payload = {
                         "body": augmented_summary,
@@ -648,4 +732,31 @@ reviewer_workflow = Workflow(
     ],
 )
 
-__all__ = ["reviewer_workflow"]
+
+async def run_reviewer_pipeline(payload: Dict[str, Any]) -> AsyncIterator[Event]:
+    """Runs the reviewer workflow pipeline with native in-memory runner event streaming."""
+    from google.adk.runners import InMemoryRunner
+    from google.adk.apps.app import App
+
+    adk_app = App(name="reviewer_agent", root_agent=reviewer_workflow)
+    runner = InMemoryRunner(app=adk_app)
+    user_id = "sdlc_reviewer"
+    session = await runner.session_service.create_session(
+        app_name=adk_app.name,
+        user_id=user_id,
+    )
+
+    user_content = types.Content(
+        role="user",
+        parts=[types.Part.from_text(text=json.dumps(payload))],
+    )
+
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session.id,
+        new_message=user_content,
+    ):
+        yield event
+
+
+__all__ = ["reviewer_workflow", "run_reviewer_pipeline"]
