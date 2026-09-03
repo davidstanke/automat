@@ -1,0 +1,282 @@
+# Feature Specification: Catering Agent (`cater_agent`) Integration
+
+## 1. Feature Overview & Objectives
+The Luncher multi-agent orchestration system coordinates team lunch meetings by delegating tasks across specialized sub-agents. This specification defines the integration of a new ADK agent named `cater_agent` residing in the `agents` directory. Its purpose is to provide catering menu options to serve at a lunch meeting.
+
+### Primary Objectives
+- **Parallel Catering Discovery**: When `luncher_agent` triggers planning and invokes `strategy_agent` and `scheduling_agent`, it simultaneously invokes `cater_agent` in parallel.
+- **Proposal Synthesis with Catering**: During proposal synthesis and when `propose_lunch` is invoked, incorporate the catering menu options returned by `cater_agent` into the structured meeting proposal.
+- **Mock Menu Baseline**: For the initial version, `cater_agent` returns static mock menu suggestions as plain text items without performing external database or service retrieval:
+  - **Menu Option 1**: Buffalo chicken wrap, mixed greens salad, chocolate cookie, assorted sodas
+  - **Menu Option 2**: Veggie tacos, snow pea salad, apple tartlets, tea service
+  - **Menu Option 3**: Lamb vindaloo, spiced cauliflower, naan, orange-mint spa water
+- **Unified Booking Persistence**: When the user submits their choices (e.g., confirming a time slot and selecting a catering menu), save the chosen catering menu along with the user's other selections in the shared booking record.
+- **Graceful Fault Tolerance**: If `cater_agent` encounters an error or becomes unreachable during parallel execution, the proposal synthesis degrades gracefully by presenting the schedule and strategic rationale alongside an informative status note.
+
+---
+
+## 2. Review Scorecard & Council Consensus
+
+| Reviewer Role | Focus Area | Score (0-100) | Status | Consensus Vote |
+| :--- | :--- | :---: | :---: | :---: |
+| **Product Reviewer** | INVEST criteria, user personas, BDD scenarios | 92 | PASS | APPROVED |
+| **Technical Reviewer** | A2A workflow, schemas, parallel fan-out/fan-in | 82 | PASS | APPROVED |
+| **Security Reviewer** | Context isolation, input validation, tenancy | 78 | PASS | APPROVED |
+| **Consensus Score** | **Spec Council Certification** | **84** | **CERTIFIED** | **UNANIMOUS PASS** |
+
+---
+
+## 3. Key Product Decisions & User Feedback
+The following product and architectural decisions were established through proactive discovery and reviewer trade-off consultations:
+
+1. **Dedicated Menu Presentation Section**:
+   - Catering menu options are formatted within a distinct, dedicated `### Catering Menu Options` section in the proposal output. Each of the 3 mock menus is listed with its courses (main, side, dessert, beverage) so the user can easily compare and choose.
+2. **Flexible Booking Selection & Option 1 Defaulting**:
+   - Users may specify both a time slot and a catering menu during confirmation (e.g., *"Book Slot 1 with Menu 2"*).
+   - If the user confirms a time slot without specifying a catering menu, the system automatically defaults to Menu Option 1 and records it in the booking to ensure complete meeting data without requiring extra conversational turns.
+3. **Strict Validation on Invalid Menu Selection**:
+   - If a user specifies an unrecognized or invalid menu choice (e.g., *"Book Slot 1 with Menu 4"*), the system rejects the invalid choice, leaves the booking uncommitted, and prompts the user to select from valid options (`Menu 1`, `Menu 2`, or `Menu 3`).
+4. **Plain Text Mock Menus for V1**:
+   - Mock menu items remain clean plain text strings without dietary or allergen tagging for the initial version.
+5. **Structured Catering Persistence & Tenancy**:
+   - The booking record schema is extended with a structured `catering_menu` object containing the selected menu identifier, name, and array of included item strings, as well as `organizer_id` and `user_id` to ensure tenancy isolation.
+6. **Resilient Proposal Generation & Context Hygiene**:
+   - If `cater_agent` fails or times out (orchestrator gathering timeout: 5.0 seconds), proposal synthesis proceeds with available time slots and includes a notice that catering options are temporarily unavailable.
+   - Context isolation hooks (`isolate_context_hook`) strip all PII and cross-agent context before invoking sub-agents.
+
+---
+
+## 4. User Personas & Core Journeys
+
+### User Personas
+- **Meeting Organizer**: Plans team lunch meetings, reviews strategic context, team availability, and proposed catering menus, and locks in a final meeting time and meal.
+- **Team Attendee**: Participates in the lunch meeting and benefits from curated, diverse catering options.
+
+### Core User Journeys
+1. **Journey 1: Lunch Planning with Catering Options**
+   - User inputs: *"Plan a lunch meeting for the launch team next Tuesday."*
+   - System triggers parallel gathering across `strategy_agent`, `scheduling_agent`, and `cater_agent`.
+   - System synthesizes a unified proposal containing strategic rationale, attendee availability, proposed time slots, and 3 distinct catering menu options.
+2. **Journey 2: Confirmation with Explicit Menu Choice**
+   - User inputs: *"Book Tuesday 12:00 with Menu 2 (Veggie Tacos)."*
+   - System registers the booking for Tuesday 12:00, records Menu Option 2 with its full item list, and responds with confirmation details (time slot, attendees, booking ID, selected menu).
+3. **Journey 3: Confirmation with Default Menu Fallback**
+   - User inputs: *"Book Slot 1."* (without specifying a menu choice)
+   - System registers the booking for Slot 1, automatically defaults the catering selection to Menu Option 1, and confirms the booking details to the user.
+4. **Journey 4: Handling Invalid Menu Input**
+   - User inputs: *"Book Slot 1 with Menu 5."*
+   - System recognizes that Menu 5 is invalid, does not commit the booking, and asks the user to pick between Menu 1, 2, or 3.
+5. **Journey 5: Resilient Planning on Catering Degradation**
+   - User inputs: *"Find lunch slots for Thursday."*
+   - If `cater_agent` fails or times out, the system generates the proposal with the available time slots and strategy rationale, noting that catering menu suggestions could not be retrieved.
+
+---
+
+## 5. Domain Models & Data Contracts
+
+### 5.1 Catering Menu Schema (`CateringMenu`)
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CateringMenu",
+  "type": "object",
+  "properties": {
+    "menu_id": {
+      "type": "string",
+      "enum": ["menu_1", "menu_2", "menu_3"],
+      "description": "Deterministic menu identifier"
+    },
+    "name": {
+      "type": "string",
+      "description": "Descriptive menu name (e.g. 'Buffalo Chicken Wrap Platter')"
+    },
+    "items": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "List of dishes, sides, desserts, and beverages included in the menu"
+    }
+  },
+  "required": ["menu_id", "name", "items"]
+}
+```
+
+### 5.2 Catering Agent Query & Response Contract
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaterAgentResponse",
+  "type": "object",
+  "properties": {
+    "menus": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CateringMenu"
+      },
+      "minItems": 1,
+      "description": "List of proposed catering menus"
+    }
+  },
+  "required": ["menus"],
+  "definitions": {
+    "CateringMenu": {
+      "type": "object",
+      "properties": {
+        "menu_id": { "type": "string" },
+        "name": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["menu_id", "name", "items"]
+    }
+  }
+}
+```
+
+### 5.3 Unified Booking Record Schema (`BookingRecord`)
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BookingRecord",
+  "type": "object",
+  "properties": {
+    "booking_id": {
+      "type": "string",
+      "pattern": "^bk_[0-9]+_[a-f0-9]{6}$",
+      "description": "Unique booking identifier generated at booking time"
+    },
+    "time_slot": {
+      "type": "string",
+      "description": "Confirmed day and time range (e.g. 'Tuesday 12:00-13:00')"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Meeting purpose or strategic alignment summary"
+    },
+    "organizer_id": {
+      "type": "string",
+      "description": "Identifier of the organizer booking the meeting"
+    },
+    "booked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp of booking creation"
+    },
+    "catering_menu": {
+      "type": "object",
+      "properties": {
+        "menu_id": { "type": "string" },
+        "name": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["menu_id", "name", "items"]
+    }
+  },
+  "required": ["booking_id", "time_slot", "booked_at", "catering_menu"]
+}
+```
+
+---
+
+## 6. Behavior-Driven Development (BDD) Acceptance Scenarios
+
+### Scenario 1: Mock Catering Menu Output
+```gherkin
+Given cater_agent is initialized in the agents ecosystem
+When cater_agent is queried with a lunch meeting request
+Then cater_agent returns exactly 3 mock menu suggestions:
+  | Menu ID | Name | Items |
+  | menu_1  | Buffalo Chicken Wrap | buffalo chicken wrap, mixed greens salad, chocolate cookie, assorted sodas |
+  | menu_2  | Veggie Tacos | veggie tacos, snow pea salad, apple tartlets, tea service |
+  | menu_3  | Lamb Vindaloo | lamb vindaloo, spiced cauliflower, naan, orange-mint spa water |
+And cater_agent does not perform any external network retrieval or database query
+```
+
+### Scenario 2: Parallel Sub-Agent Gathering & Context Isolation
+```gherkin
+Given luncher_agent receives a planning intent prompt (e.g., "Plan lunch for next Tuesday")
+When luncher_agent executes its information gathering phase
+Then luncher_agent invokes strategy_agent, scheduling_agent, and cater_agent concurrently in parallel
+And isolate_context_hook ensures no cross-agent chatter or attendee PII leaks into cater_agent
+And the gathering phase total duration is bounded by max(strategy_latency, scheduling_latency, catering_latency)
+```
+
+### Scenario 3: Proposal Synthesis with Catering Options
+```gherkin
+Given strategy_agent provides strategic priorities, scheduling_agent provides time slots and attendee roster, and cater_agent provides the 3 mock menus
+When proposal synthesizer constructs the final lunch proposal
+Then the proposal contains:
+  1. A title and strategic rationale
+  2. The full team attendee roster
+  3. Ranked time slots with individual attendance/absence notes and a recommended slot
+  4. A dedicated "### Catering Menu Options" section listing all 3 mock menus with their items
+  5. Clear guidance on how to confirm the booking with a preferred time slot and catering menu
+```
+
+### Scenario 4: Booking Confirmation with Explicit Catering Selection
+```gherkin
+Given a lunch proposal has been presented with 3 catering menu options
+When the user responds with "Book Tuesday 12:00 with Menu 2" (or "Select Option 2 catering")
+Then the system records a new booking with:
+  - time_slot: "Tuesday 12:00-13:00"
+  - catering_menu.menu_id: "menu_2"
+  - catering_menu.name: "Veggie Tacos"
+  - catering_menu.items: ["veggie tacos", "snow pea salad", "apple tartlets", "tea service"]
+And the system replies with a booking confirmation listing the time slot, attendees, booking ID, and selected catering menu
+```
+
+### Scenario 5: Booking Confirmation with Default Catering Selection
+```gherkin
+Given a lunch proposal has been presented with 3 catering menu options
+When the user responds with "Book Option 1" without specifying a catering menu
+Then the system defaults the catering selection to Menu Option 1
+And records the booking with catering_menu containing menu_1 details
+And informs the user that Menu Option 1 has been selected by default
+```
+
+### Scenario 6: Rejection of Invalid Catering Selection
+```gherkin
+Given a lunch proposal has been presented with 3 catering menu options
+When the user responds with "Book Slot 1 with Menu 4"
+Then the system detects that Menu 4 is not a valid menu option
+And the system does NOT persist a booking record
+And the system replies with a clarifying prompt asking the user to choose Menu 1, Menu 2, or Menu 3
+```
+
+### Scenario 7: Graceful Handling of Catering Sub-Agent Failure
+```gherkin
+Given cater_agent fails or exceeds the 5.0 second gather timeout
+When luncher_agent gathers data for a planning request
+Then proposal synthesis completes successfully using available data from strategy_agent and scheduling_agent
+And the proposal includes the proposed time slots and strategic rationale
+And the proposal indicates that catering suggestions are temporarily unavailable
+```
+
+---
+
+## 7. Non-Functional Requirements & Verification Protocols
+
+### 7.1 Performance & Reliability
+- **Mock Response Latency**: `cater_agent` mock response must complete within < 50ms locally.
+- **Orchestrator Timeout**: Orchestrator sub-agent call timeout set to 5.0 seconds.
+- **Parallel Fan-out**: The three sub-agents (`strat_agent`, `sched_agent`, `cater_agent`) must execute in parallel without sequential pipeline stalls.
+- **Payload Integrity**: All agent communications must conform to A2A event formats and JSON schemas.
+
+### 7.2 Deterministic Verification Protocols
+1. **Local Parallel Agent Verification**:
+   - Start all agents locally across assigned ports (`luncher_agent`: 8080, `strategy_agent`: 8081, `scheduling_agent`: 8082, `cater_agent`: 8083).
+   - Send planning request to `luncher_agent` via API / Dev UI.
+   - Assert that response output contains title, attendees, slots, and the 3 mock catering menus.
+2. **Booking Flow Verification**:
+   - Issue booking turn with explicit menu choice ("Book Slot 1 with Menu 2").
+   - Assert booking record contains `catering_menu` object matching `menu_2`.
+   - Issue booking turn without menu choice ("Book Slot 1").
+   - Assert booking record contains `catering_menu` object matching `menu_1`.
+   - Issue booking turn with invalid choice ("Book Slot 1 with Menu 4").
+   - Assert booking is refused and user is prompted to pick Menu 1, 2, or 3.
+3. **Resilience Verification**:
+   - Stop `cater_agent` process while other agents remain running.
+   - Send planning prompt to `luncher_agent`.
+   - Assert proposal renders with valid time slots and a notice of catering unavailability without crashing the application.
