@@ -5,6 +5,7 @@ on:
     paths:
       - 'docs/specs/*.md'
       - '!docs/specs/_implemented/**'
+      - '!docs/specs/_samples/**'
       - 'specs/**/spec.md'
     branches:
       - 'feature/**'
