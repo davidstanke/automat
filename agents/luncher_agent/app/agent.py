@@ -26,6 +26,7 @@ from google.genai.types import (
     ThinkingLevel,
 )
 
+from google.adk.a2a.agent.config import A2aRemoteAgentConfig, RequestInterceptor
 from google.adk.agents import Agent
 from google.adk.agents.context import Context
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
@@ -54,12 +55,37 @@ load_dotenv(override=True)
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT_ID")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
-# Pinned version. Override via GOOGLE_GENAI_MODEL. Only served from the `global`
-# endpoint -- regional locations return 404 for it.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.6-flash")
+# Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 
 logger.info("Using Gemini model '%s' in location '%s'", MODEL, MODEL_LOCATION)
+
+
+def _extract_part_text(part: Any) -> str:
+    """Extracts raw text string from an A2A message part."""
+    if hasattr(part, "text"):
+        return part.text or ""
+    if hasattr(part, "root") and hasattr(part.root, "text"):
+        return part.root.text or ""
+    return ""
+
+
+async def isolate_context_hook(ctx: Any, a2a_request: Any, params: Any) -> tuple[Any, Any]:
+    """Strips leaked cross-agent context from A2A message parts.
+
+    Ensures parallel sub-agents (e.g. strategy_agent and scheduling_agent)
+    only receive the user's direct prompt without other agents' outputs.
+    """
+    cleaned_parts = []
+    for part in a2a_request.parts:
+        text = _extract_part_text(part)
+        if "[scheduling_agent] said:" in text or "[strategy_agent] said:" in text or "For context:" in text:
+            continue
+        cleaned_parts.append(part)
+    if cleaned_parts:
+        a2a_request.parts = cleaned_parts
+    return a2a_request, params
 
 
 def format_agent_runtime_url(
@@ -203,6 +229,9 @@ def discover_sub_agent(
         agent_card=agent_url,
         httpx_client=client,
         timeout=120.0,
+        config=A2aRemoteAgentConfig(
+            request_interceptors=[RequestInterceptor(before_request=isolate_context_hook)]
+        ),
     )
 
 
@@ -257,7 +286,7 @@ async def intent_router(ctx: Context, node_input: Any) -> Event:
         return Event(output=node_input, route="plan")
 
     try:
-        client = genai.Client()
+        client = genai.Client(vertexai=True, location=MODEL_LOCATION)
         response = await client.aio.models.generate_content(
             model=MODEL,
             contents=user_prompt,

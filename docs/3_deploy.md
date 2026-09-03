@@ -71,6 +71,7 @@ uv --directory agents/strat_agent run agents-cli deploy \
   --project "$GOOGLE_CLOUD_PROJECT_ID" \
   --region "$GOOGLE_CLOUD_LOCATION" \
   --agent-identity \
+  --min-instances 1 \
   --update-env-vars "$BASE_ENV,$AGENT_SETTINGS_ENV${STRATEGY_DOCS_BUCKET:+,STRATEGY_DOCS_BUCKET=$STRATEGY_DOCS_BUCKET}"
 ```
 

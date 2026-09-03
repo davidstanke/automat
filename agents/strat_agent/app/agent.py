@@ -16,26 +16,28 @@ load_dotenv(override=True)
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 
 
-def inspect_strategy_documents() -> str:
-    """Lists and extracts text from all strategy PDF documents in the corpus.
+# In-memory document cache to eliminate multi-second pypdf overhead on every invocation
+_DOCUMENT_CACHE: dict[str, str] = {}
 
-    Dynamically switches between local directory (assets/docs) and a Google Cloud
-    Storage bucket based on the presence of the 'STRATEGY_DOCS_BUCKET' env variable.
 
-    Returns:
-        str: Concatenated text content extracted from all PDFs, or an explanation if none are found.
+def load_and_cache_strategy_documents(force_refresh: bool = False) -> str:
+    """Loads and caches strategy document text in memory.
+
+    Pre-parsing documents at container initialization provides instant (<1ms)
+    retrieval during agent execution cycles and trims redundant boilerplate.
     """
+    global _DOCUMENT_CACHE
+    if not force_refresh and "content" in _DOCUMENT_CACHE:
+        return _DOCUMENT_CACHE["content"]
+
     bucket_name = os.getenv("STRATEGY_DOCS_BUCKET")
     extracted_texts = []
 
     if bucket_name:
-        # A returned string is the tool's answer, so a failed read would reach the
-        # orchestrator as strategy context. Raise instead.
-        print(f"[Strategy Agent] Running in cloud mode. Inspecting GCS bucket: '{bucket_name}'...")
+        print(f"[Strategy Agent] Pre-caching GCS bucket: '{bucket_name}'...")
         try:
             client = storage.Client()
             bucket = client.bucket(bucket_name)
-            # List all blobs and filter for .pdf
             blobs = list(bucket.list_blobs())
         except Exception as e:
             raise RuntimeError(
@@ -51,23 +53,18 @@ def inspect_strategy_documents() -> str:
             )
 
         for blob in pdf_blobs:
-            print(f"[Strategy Agent] Fetching and parsing GCS blob: '{blob.name}'...")
             pdf_data = blob.download_as_bytes()
             pdf_reader = pypdf.PdfReader(io.BytesIO(pdf_data))
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() or ""
-            extracted_texts.append(f"--- Document (GCS): {blob.name} ---\n{text}\n")
+            text = "".join(page.extract_text() or "" for page in pdf_reader.pages)
+            extracted_texts.append(f"--- Document (GCS): {blob.name} ---\n{text.strip()}\n")
     else:
-        # Local Development: Fetch from agents/strat_agent/data/docs
         current_dir = os.path.dirname(os.path.abspath(__file__))
         strat_agent_dir = os.path.dirname(current_dir)
         local_docs_dir = os.path.join(strat_agent_dir, "data", "docs")
         if not os.path.exists(local_docs_dir):
             local_docs_dir = os.path.join(strat_agent_dir, "data")
 
-        print(f"[Strategy Agent] Running in local mode. Inspecting local directory: '{local_docs_dir}'...")
-
+        print(f"[Strategy Agent] Pre-caching local docs from: '{local_docs_dir}'...")
         if not os.path.exists(local_docs_dir):
             return f"Local strategy documents directory not found at '{local_docs_dir}'."
 
@@ -81,17 +78,21 @@ def inspect_strategy_documents() -> str:
 
         for file_name in pdf_files:
             file_path = os.path.join(local_docs_dir, file_name)
-            print(f"[Strategy Agent] Parsing local PDF: '{file_name}'...")
             try:
                 pdf_reader = pypdf.PdfReader(file_path)
-                text = ""
-                for page in pdf_reader.pages:
-                    text += page.extract_text() or ""
-                extracted_texts.append(f"--- Document (Local): {file_name} ---\n{text}\n")
+                text = "".join(page.extract_text() or "" for page in pdf_reader.pages)
+                extracted_texts.append(f"--- Document (Local): {file_name} ---\n{text.strip()}\n")
             except Exception as e:
                 extracted_texts.append(f"--- Document (Local): {file_name} ---\nError parsing PDF: {str(e)}\n")
 
-    return "\n\n".join(extracted_texts)
+    content = "\n\n".join(extracted_texts)
+    _DOCUMENT_CACHE["content"] = content
+    return content
+
+
+def inspect_strategy_documents() -> str:
+    """Returns extracted corporate strategy documents instantly from in-memory cache."""
+    return load_and_cache_strategy_documents()
 
 
 strat_retry_policy = HttpRetryOptions(
@@ -104,9 +105,14 @@ strat_retry_policy = HttpRetryOptions(
 logger = logging.getLogger(__name__)
 
 MODEL_LOCATION = os.getenv("GOOGLE_GENAI_LOCATION", "global")
-# Pinned version. Override via GOOGLE_GENAI_MODEL. Only served from the `global`
-# endpoint -- regional locations return 404 for it.
-MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.6-flash")
+# Pinned version. Override via GOOGLE_GENAI_MODEL. Served from global endpoint.
+MODEL = os.getenv("GOOGLE_GENAI_MODEL", "gemini-3.8-flash")
+
+# Pre-warm document cache on module load if local files exist
+try:
+    load_and_cache_strategy_documents()
+except Exception as _e:
+    logger.warning("Could not pre-warm strategy documents cache on startup: %s", _e)
 
 logger.info("Using Gemini model '%s' in location '%s'", MODEL, MODEL_LOCATION)
 
@@ -120,9 +126,11 @@ root_agent = Agent(
     name="strategy_agent",
     description="Analyzes corporate strategy documents and returns a brief strategic summary.",
     instruction=(
-        "You are an expert strategic analyst. Your task is to analyze the text "
+        "You are an expert strategic analyst for GeniCo. Your task is to analyze the text "
         "provided by the 'inspect_strategy_documents' tool and summarize the corporate strategy "
         "and key product initiatives (especially flagship launches such as OmniChef) implied by those documents.\n\n"
+        "Always call the 'inspect_strategy_documents' tool first to retrieve the facts and provide the strategic context, "
+        "even when the user prompt relates to scheduling, team gatherings, or events (which are aligned with company initiatives).\n\n"
         "Rules for your output:\n"
         "1. Structure your output with clear Markdown headers, including '## Strategic Priorities & Key Initiatives' and '## Strategic Context'.\n"
         "2. Always explicitly highlight major active product launches and strategic projects (e.g., OmniChef Global Launch, VisionSphere).\n"
