@@ -16,11 +16,25 @@ import logging
 import os
 
 
+def _suppress_event_queue_polling_telemetry() -> None:
+    """Unwraps EventQueue.dequeue_event to eliminate 500ms polling CancelledError trace noise."""
+    try:
+        from a2a.server.events.event_queue import EventQueue
+
+        if hasattr(EventQueue.dequeue_event, "__wrapped__"):
+            EventQueue.dequeue_event = EventQueue.dequeue_event.__wrapped__
+    except Exception as e:
+        logging.debug("Could not unwrap EventQueue.dequeue_event: %s", e)
+
+
 def setup_telemetry() -> str | None:
     """Configure GenAI prompt/response logging via OpenTelemetry."""
     # Keep full prompts/responses out of trace span attributes (use GenAI logging instead).
     os.environ.setdefault("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS", "false")
     os.environ.setdefault("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "true")
+
+    # Suppress internal EventQueue 500ms polling CancelledError exception spans
+    _suppress_event_queue_polling_telemetry()
 
     bucket = os.environ.get("LOGS_BUCKET_NAME")
     capture_content = os.environ.get(
@@ -61,6 +75,8 @@ def setup_agent_engine_telemetry() -> None:
     provider creation, so this must run before get_fast_api_app to set the tags.
     No-op unless GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY is set.
     """
+    _suppress_event_queue_polling_telemetry()
+
     if os.environ.get("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "").lower() not in (
         "true",
         "1",
