@@ -126,6 +126,7 @@ def test_workflow_structure() -> None:
     assert "intent_router" in node_names
     assert "strategy_agent" in node_names
     assert "scheduling_agent" in node_names
+    assert "cater_agent" in node_names
     assert "booking_handler" in node_names
     assert "join_info_gatherer" in node_names
     assert "lunch_synthesizer" in node_names
@@ -138,6 +139,9 @@ def test_workflow_execution_mocked() -> None:
 
         def mock_sched(node_input):
             return "Team (3): Alice, Bob, Charlie\n1. Tue 12:00 (3 of 3 free)"
+
+        def mock_cater(node_input):
+            return "### Catering Menu Options\n1. Menu Option 1: Buffalo Chicken Wrap"
 
         def mock_synth(node_input):
             return f"# Proposal\n{node_input}"
@@ -157,11 +161,11 @@ def test_workflow_execution_mocked() -> None:
                 (
                     mock_router,
                     {
-                        "plan": (mock_strat, mock_sched),
+                        "plan": (mock_strat, mock_sched, mock_cater),
                         "book": mock_book,
                     },
                 ),
-                ((mock_strat, mock_sched), join),
+                ((mock_strat, mock_sched, mock_cater), join),
                 (join, mock_synth),
             ],
         )

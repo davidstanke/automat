@@ -115,6 +115,25 @@ def test_round_trip_preserves_fields(fake: _FakeMemories) -> None:
     assert listed[0]["time_slot"] == "Friday 12:00-13:00"
     assert listed[0]["reason"] == "Team lunch"
     assert listed[0]["booking_id"].startswith("bk_")
+    assert listed[0]["catering_menu"]["menu_id"] == "menu_1"
+    assert listed[0]["catering_menu"]["name"] == "Buffalo Chicken Wrap"
+
+
+def test_round_trip_preserves_custom_catering_menu(fake: _FakeMemories) -> None:
+    custom_menu = bookings.MOCK_CATERING_MENUS["menu_2"]
+    asyncio.run(
+        bookings.add_booking(
+            "Tuesday 12:00-13:00",
+            "Veggie Lunch",
+            catering_menu=custom_menu,
+        )
+    )
+    listed = asyncio.run(bookings.list_bookings())
+
+    assert len(listed) == 1
+    assert listed[0]["catering_menu"]["menu_id"] == "menu_2"
+    assert listed[0]["catering_menu"]["name"] == "Veggie Tacos"
+    assert "veggie tacos" in listed[0]["catering_menu"]["items"]
 
 
 def test_reads_every_page_not_just_the_first(fake: _FakeMemories) -> None:

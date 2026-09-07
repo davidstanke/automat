@@ -157,3 +157,39 @@ def test_discover_sub_agent_warns_when_deployed_in_cloud_without_config(monkeypa
 
     assert agent._agent_card_source == "http://localhost:8081/a2a/app/.well-known/agent-card.json"
     assert "Running in Agent Runtime cloud container" in caplog.text
+
+
+def test_discover_cater_agent_via_engine_id_env(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT_ID", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.setenv("CATER_AGENT_ENGINE_ID", "555444333")
+
+    agent = discover_sub_agent(
+        agent_name="cater_agent",
+        default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+        description="Catering coordinator",
+    )
+
+    assert "reasoningEngines/555444333" in str(agent._agent_card_source)
+
+
+def test_discover_cater_agent_local_fallback(monkeypatch) -> None:
+    for var in [
+        "CATER_AGENT_ENGINE_ID",
+        "CATER_AGENT_RUNTIME_ID",
+        "CATERING_AGENT_ENGINE_ID",
+        "CATERING_AGENT_RUNTIME_ID",
+        "CATER_AGENT_URL",
+        "CATER_URL",
+        "GOOGLE_CLOUD_AGENT_ENGINE_ID",
+    ]:
+        monkeypatch.delenv(var, raising=False)
+
+    agent = discover_sub_agent(
+        agent_name="cater_agent",
+        default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+        description="Catering coordinator",
+    )
+
+    assert agent._agent_card_source == "http://localhost:8083/a2a/app/.well-known/agent-card.json"
+

@@ -42,8 +42,8 @@ os.environ.pop("GOOGLE_CLOUD_AGENT_ENGINE_ID", None)
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 AGENTS_DIR = os.path.dirname(AGENT_DIR)
 
-# The card path carries the ADK App name, which is "app" for both sub-agents.
-SUB_AGENTS = (("strat_agent", 8081), ("sched_agent", 8082))
+# The card path carries the ADK App name, which is "app" for all sub-agents.
+SUB_AGENTS = (("strat_agent", 8081), ("sched_agent", 8082), ("cater_agent", 8083))
 
 
 def sub_agent_card_url(port: int) -> str:
