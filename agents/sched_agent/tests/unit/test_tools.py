@@ -72,3 +72,40 @@ def test_find_available_slots_tuesday() -> None:
     assert "Team (8): Liam, Diego, Dan, Maya, Aaliyah, Naomi, Jordan, Kai" in result
     assert "Tuesday 13:00-14:00 (7 of 8 free - Kai unavailable)" in result
 
+
+def test_book_meeting_conversational_menu_matching() -> None:
+    """AC4: Conversational menu matching for explicit and descriptive phrases."""
+    # Explicit ID
+    res1 = asyncio.run(book_meeting("Tuesday 12:00-13:00", catering_menu_choice="menu_2"))
+    assert "Successfully booked!" in res1
+    assert "Veggie Taco Fiesta" in res1
+    assert "veggie tacos, snow pea salad, apple tartlets, tea service" in res1
+
+    # Descriptive phrase
+    res2 = asyncio.run(book_meeting("Wednesday 12:00-13:00", catering_menu_choice="Veggie Tacos"))
+    assert "Successfully booked!" in res2
+    assert "Veggie Taco Fiesta" in res2
+
+    # In-text phrase
+    res3 = asyncio.run(book_meeting("Thursday 12:00-13:00", reason="Team sync with the taco platter"))
+    assert "Successfully booked!" in res3
+    assert "Veggie Taco Fiesta" in res3
+
+
+def test_book_meeting_default_menu_fallback() -> None:
+    """AC5: Default to Menu Option 1 when catering is omitted."""
+    res = asyncio.run(book_meeting("Friday 12:00-13:00", "Team lunch"))
+    assert "Successfully booked!" in res
+    assert "Buffalo Chicken Wrap Platter" in res
+    assert "Selected by default" in res
+
+
+def test_book_meeting_invalid_menu_warning_and_fallback() -> None:
+    """AC6: Invalid catering selection warns user and falls back to Menu Option 1."""
+    res = asyncio.run(book_meeting("Friday 12:00-13:00", catering_menu_choice="Menu 4"))
+    assert "Successfully booked!" in res
+    assert "Buffalo Chicken Wrap Platter" in res
+    assert "Warning" in res
+    assert "unrecognized" in res.lower()
+
+

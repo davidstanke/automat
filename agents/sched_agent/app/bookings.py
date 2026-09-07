@@ -59,21 +59,61 @@ def _memories():
     return client.aio.agent_engines.memories
 
 
-def _new_booking(time_slot: str, reason: str = "") -> dict[str, Any]:
+from .catering import DEFAULT_CATERING_MENU
+
+
+def _new_booking(
+    time_slot: str,
+    reason: str = "",
+    organizer_id: str = "organizer",
+    catering_menu: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     now = datetime.datetime.now(datetime.timezone.utc)
+    if catering_menu is None:
+        catering_menu = DEFAULT_CATERING_MENU
+
     return {
         # Seconds alone collide when two bookings land in the same second, and
         # cancellation addresses a booking by this id.
         "booking_id": f"bk_{int(now.timestamp())}_{uuid.uuid4().hex[:6]}",
         "time_slot": time_slot,
         "reason": reason,
+        "organizer_id": organizer_id,
         "booked_at": now.isoformat(),
+        "catering_menu": catering_menu,
     }
 
 
-async def add_booking(time_slot: str, reason: str = "") -> dict[str, Any]:
+async def add_booking(
+    time_slot: str,
+    reason: str = "",
+    organizer_id: str = "organizer",
+    catering_menu: dict[str, Any] | None = None,
+    session_user_id: str | None = None,
+) -> dict[str, Any]:
     """Records a booking in the team collection and returns it."""
-    booking = _new_booking(time_slot, reason)
+    # AC8: Session-bound authorization & ownership validation
+    if (
+        session_user_id
+        and organizer_id
+        and organizer_id != "organizer"
+        and session_user_id != organizer_id
+    ):
+        raise PermissionError(
+            f"Cross-user identity mismatch: authenticated session user '{session_user_id}' does not match organizer '{organizer_id}'"
+        )
+
+    resolved_organizer = (
+        organizer_id
+        if (organizer_id and organizer_id != "organizer")
+        else (session_user_id or "organizer")
+    )
+    booking = _new_booking(
+        time_slot=time_slot,
+        reason=reason,
+        organizer_id=resolved_organizer,
+        catering_menu=catering_menu,
+    )
     memories = _memories()
 
     if memories is None:
