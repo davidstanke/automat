@@ -27,20 +27,70 @@ def get_team_members() -> list[dict]:
         return []
 
 
-async def book_meeting(time_slot: str, reason: str = "") -> str:
+from google.adk.tools import ToolContext
+from .catering import normalize_catering_choice
+
+
+async def book_meeting(
+    time_slot: str,
+    reason: str = "",
+    catering_menu_choice: str = "",
+    organizer_id: str = "organizer",
+    tool_context: ToolContext | None = None,
+) -> str:
     """Records a confirmed meeting in the shared team bookings.
 
     Args:
-        time_slot: The day and time range of the confirmed meeting, e.g., "Monday 10:00-11:00".
+        time_slot: The day and time range of the confirmed meeting, e.g., "Monday 10:00-11:00" or "Tuesday 12:00".
         reason: Optional brief reason/summary for selecting this choice.
+        catering_menu_choice: Optional catering menu choice (e.g., 'menu_2', 'Veggie Tacos', 'Option 1').
+            If omitted, automatically defaults to Menu Option 1 (Buffalo Chicken Wrap Platter).
+        organizer_id: Optional identifier of the organizer booking the meeting.
+        tool_context: Optional ADK tool context containing session information.
     """
-    print(f"[Scheduling Agent] Finalizing booking: {time_slot}...")
+    print(f"[Scheduling Agent] Finalizing booking: {time_slot} (catering: '{catering_menu_choice}')...")
+    
+    session_user_id = None
+    if tool_context is not None:
+        session = getattr(tool_context, "session", None)
+        if session is not None:
+            session_user_id = getattr(session, "user_id", None)
+
+    # Check if catering choice is embedded in time_slot or reason if catering_menu_choice is empty
+    choice_to_resolve = catering_menu_choice
+    if not choice_to_resolve:
+        import re
+        for text_source in (reason, time_slot):
+            m = re.search(r"(?:with\s+|catering:\s*|menu\s*:\s*)([a-zA-Z0-9_\s]+)", text_source, re.IGNORECASE)
+            if m:
+                choice_to_resolve = m.group(1).strip()
+                break
+
+    selected_menu, is_default, warning = normalize_catering_choice(choice_to_resolve)
+
     try:
-        booking = await bookings.add_booking(time_slot, reason)
-        return (
-            f"Successfully booked! Meeting scheduled for {time_slot}. "
-            f"Booking ID: {booking['booking_id']}."
+        booking = await bookings.add_booking(
+            time_slot=time_slot,
+            reason=reason,
+            organizer_id=organizer_id,
+            catering_menu=selected_menu,
+            session_user_id=session_user_id,
         )
+
+        if warning:
+            menu_info = f"\n- Catering Menu: {selected_menu['name']} (Warning: {warning})"
+        elif is_default:
+            menu_info = f"\n- Catering Menu: {selected_menu['name']} (Selected by default - Option 1: {', '.join(selected_menu['items'])})"
+        else:
+            menu_info = f"\n- Catering Menu: {selected_menu['name']} ({', '.join(selected_menu['items'])})"
+
+        return (
+            f"Successfully booked! Meeting scheduled for {time_slot}.\n"
+            f"- Booking ID: {booking['booking_id']}"
+            f"{menu_info}"
+        )
+    except PermissionError as pe:
+        return f"Booking rejected: {str(pe)}"
     except Exception as e:
         return f"Failed to book meeting: {str(e)}"
 
@@ -56,12 +106,13 @@ async def get_bookings() -> str:
         existing = await bookings.list_bookings()
         if not existing:
             return "No meetings are currently booked."
-        lines = [
-            f"- {b['time_slot']}"
-            + (f" ({b['reason']})" if b.get("reason") else "")
-            + f" (booking {b['booking_id']})"
-            for b in existing
-        ]
+        lines = []
+        for b in existing:
+            cater_part = ""
+            if b.get("catering_menu"):
+                cater_part = f" [Catering: {b['catering_menu'].get('name', 'Menu')}]"
+            reason_part = f" ({b['reason']})" if b.get("reason") else ""
+            lines.append(f"- {b['time_slot']}{reason_part}{cater_part} (booking {b['booking_id']})")
         return "Existing team bookings:\n" + "\n".join(lines)
     except Exception as e:
         return f"Failed to read bookings: {str(e)}"

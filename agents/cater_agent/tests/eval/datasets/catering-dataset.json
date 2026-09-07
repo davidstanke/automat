@@ -1,0 +1,21 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "menu_options_query",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Show me the catering menu options for our lunch meeting."}]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "1. Buffalo Chicken Wrap Platter\n2. Veggie Taco Fiesta\n3. Indian Curry Feast"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

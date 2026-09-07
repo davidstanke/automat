@@ -70,8 +70,30 @@ def test_build_lunch_proposal_markdown_basic() -> None:
     assert "*Absences*: Everyone can attend" in markdown
     assert "2. **Wed 13 Aug, 12:30-13:30 (7 of 8 free)**" in markdown
     assert "*Absences*: Kai" in markdown
+    assert "### Catering Menu Options" in markdown
+    assert "Buffalo Chicken Wrap Platter" in markdown
+    assert "Veggie Taco Fiesta" in markdown
+    assert "Indian Curry Feast" in markdown
     assert "You might want to order some food for this meeting." in markdown
     assert "*To confirm, reply with your preferred time slot" in markdown
+
+
+def test_build_lunch_proposal_markdown_degraded_catering() -> None:
+    """AC7: Graceful degradation notice when catering service is unavailable."""
+    slots = [
+        {"label": SAMPLE_LABELS[0], "value": SAMPLE_VALUES[0], "absent": ""},
+    ]
+    markdown = build_lunch_proposal_markdown(
+        title="OmniChef Launch Lunch",
+        rationale="Aligns cross-functional team on Q4 launch goals.",
+        attendees=SAMPLE_ROSTER,
+        time_slots=slots,
+        recommended_slot="2026-08-12T12:00",
+        catering_unavailable=True,
+    )
+
+    assert "### Catering Menu Options" in markdown
+    assert "*Catering suggestions are temporarily unavailable.*" in markdown
 
 
 def test_build_lunch_proposal_markdown_validation_errors() -> None:
@@ -94,18 +116,33 @@ def test_build_lunch_proposal_markdown_validation_errors() -> None:
         )
 
 
-def _mock_tool_context(scheduling_agent_output: str) -> MagicMock:
+def _mock_tool_context(
+    scheduling_agent_output: str,
+    cater_agent_output: str = "",
+) -> MagicMock:
     tool_context = MagicMock()
     tool_context.invocation_id = "inv-123"
 
-    event = MagicMock()
-    event.author = "scheduling_agent"
-    event.invocation_id = "inv-123"
-    part = MagicMock()
-    part.text = scheduling_agent_output
-    event.content.parts = [part]
+    events = []
 
-    tool_context.session.events = [event]
+    event_sched = MagicMock()
+    event_sched.author = "scheduling_agent"
+    event_sched.invocation_id = "inv-123"
+    part_sched = MagicMock()
+    part_sched.text = scheduling_agent_output
+    event_sched.content.parts = [part_sched]
+    events.append(event_sched)
+
+    if cater_agent_output:
+        event_cater = MagicMock()
+        event_cater.author = "cater_agent"
+        event_cater.invocation_id = "inv-123"
+        part_cater = MagicMock()
+        part_cater.text = cater_agent_output
+        event_cater.content.parts = [part_cater]
+        events.append(event_cater)
+
+    tool_context.session.events = events
     return tool_context
 
 
@@ -129,6 +166,8 @@ def test_format_lunch_proposal_success() -> None:
     assert "# OmniChef Alignment" in result
     assert "### Included Team Members" in result
     assert "Liam, Diego, Dan, Maya, Aaliyah, Naomi, Jordan, Kai" in result
+    assert "### Catering Menu Options" in result
+    assert "Buffalo Chicken Wrap Platter" in result
 
 
 def test_format_lunch_proposal_mismatched_lengths() -> None:

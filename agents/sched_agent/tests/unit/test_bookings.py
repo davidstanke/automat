@@ -262,3 +262,58 @@ def test_clearing_all_falls_back_in_process_when_no_engine_configured(
     assert len(asyncio.run(bookings.list_bookings())) == 2
     assert asyncio.run(bookings.delete_all_bookings(2)) == 2
     assert asyncio.run(bookings.list_bookings()) == []
+
+
+def test_round_trip_preserves_catering_menu_and_organizer(fake: _FakeMemories) -> None:
+    custom_menu = {
+        "menu_id": "menu_2",
+        "name": "Veggie Taco Fiesta",
+        "items": ["veggie tacos", "snow pea salad", "apple tartlets", "tea service"],
+    }
+    b = asyncio.run(
+        bookings.add_booking(
+            time_slot="Tuesday 12:00-13:00",
+            reason="Strategic sync",
+            organizer_id="user_123",
+            catering_menu=custom_menu,
+        )
+    )
+    assert b["organizer_id"] == "user_123"
+    assert b["catering_menu"]["menu_id"] == "menu_2"
+
+    listed = asyncio.run(bookings.list_bookings())
+    assert len(listed) == 1
+    assert listed[0]["organizer_id"] == "user_123"
+    assert listed[0]["catering_menu"]["menu_id"] == "menu_2"
+    assert listed[0]["catering_menu"]["name"] == "Veggie Taco Fiesta"
+    assert listed[0]["catering_menu"]["items"] == [
+        "veggie tacos",
+        "snow pea salad",
+        "apple tartlets",
+        "tea service",
+    ]
+
+
+def test_session_bound_authorization_mismatch_raises(fake: _FakeMemories) -> None:
+    """AC8: Reject booking attempt if cross-user identity mismatch is detected."""
+    with pytest.raises(PermissionError, match="Cross-user identity mismatch"):
+        asyncio.run(
+            bookings.add_booking(
+                time_slot="Tuesday 12:00-13:00",
+                organizer_id="user_victim",
+                session_user_id="user_attacker",
+            )
+        )
+
+
+def test_session_bound_authorization_match_succeeds(fake: _FakeMemories) -> None:
+    """AC8: When session identity matches organizer_id, booking succeeds."""
+    b = asyncio.run(
+        bookings.add_booking(
+            time_slot="Tuesday 12:00-13:00",
+            organizer_id="user_123",
+            session_user_id="user_123",
+        )
+    )
+    assert b["organizer_id"] == "user_123"
+
