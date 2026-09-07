@@ -105,7 +105,9 @@ def _extract_owner_repo(repo_url: str) -> tuple[Optional[str], Optional[str]]:
     """Extracts owner and repo name from GitHub URL (HTTPS or SSH)."""
     if not repo_url:
         return None, None
-    clean = repo_url.rstrip("/").rstrip(".git")
+    clean = repo_url.strip().rstrip("/")
+    if clean.endswith(".git"):
+        clean = clean[:-4].rstrip("/")
     if "github.com/" in clean:
         parts = clean.split("github.com/")[-1].split("/")
         if len(parts) >= 2:
@@ -684,6 +686,9 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
                         print(f"[Workflow: publish_review] Fallback review post error: {e2}")
 
     # Emit final Markdown Execution Summary
+    gh_status = "Published" if published else ("Failed to Publish" if (repo_url and pr_number and github_token) else "Completed (Local)")
+    wf_status = "COMPLETED" if (published or not (repo_url and pr_number and github_token)) else "FAILED"
+
     summary_report = (
         f"\n### SDLC Execution Summary\n\n"
         f"| Metric | Result |\n"
@@ -694,8 +699,8 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
         f"| **Defect & Safety Score** | `{synthesis.get('defect_safety_score', 85)}/100` |\n"
         f"| **Overall Quality Score** | `{overall_score}/100` |\n"
         f"| **Inline Suggestions** | `{len(inline_comments)}` |\n"
-        f"| **GitHub Status** | `{'Published' if published else 'Completed'}` |\n"
-        f"| **Workflow Status** | `status: COMPLETED` |\n"
+        f"| **GitHub Status** | `{gh_status}` |\n"
+        f"| **Workflow Status** | `status: {wf_status}` |\n"
     )
 
     yield Event(
@@ -706,7 +711,7 @@ async def publish_review_node(ctx: Context, node_input: Any) -> AsyncIterator[Ev
     )
 
     final_output = {
-        "status": "completed",
+        "status": "completed" if (published or not (repo_url and pr_number and github_token)) else "failed",
         "overall_score": overall_score,
         "clean_code_score": synthesis.get("clean_code_score", 85),
         "maintainability_score": synthesis.get("maintainability_score", 85),

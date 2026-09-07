@@ -93,6 +93,23 @@ class TestReviewerWorkflowHelpers(unittest.TestCase):
         self.assertEqual(owner, "my-org")
         self.assertEqual(repo, "my-repo")
 
+        # Test repos with characters found in '.git' such as trailing 't'
+        owner, repo = _extract_owner_repo("https://github.com/davidstanke/automat.git")
+        self.assertEqual(owner, "davidstanke")
+        self.assertEqual(repo, "automat")
+
+        owner, repo = _extract_owner_repo("https://github.com/davidstanke/automat.git/")
+        self.assertEqual(owner, "davidstanke")
+        self.assertEqual(repo, "automat")
+
+        owner, repo = _extract_owner_repo("https://github.com/davidstanke/automat")
+        self.assertEqual(owner, "davidstanke")
+        self.assertEqual(repo, "automat")
+
+        owner, repo = _extract_owner_repo("git@github.com:davidstanke/automat.git")
+        self.assertEqual(owner, "davidstanke")
+        self.assertEqual(repo, "automat")
+
         owner, repo = _extract_owner_repo("invalid-url")
         self.assertIsNone(owner)
         self.assertIsNone(repo)
