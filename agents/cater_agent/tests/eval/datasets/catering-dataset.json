@@ -1,0 +1,24 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "catering_menus_query",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "What catering menus are available for our lunch meeting?"}]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [{"text": "Menu 1: Buffalo Chicken Wrap, Menu 2: Veggie Tacos, Menu 3: Lamb Vindaloo."}]
+        }
+      }
+    },
+    {
+      "eval_case_id": "food_options",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Suggest food options for team lunch."}]
+      }
+    }
+  ]
+}

@@ -146,14 +146,30 @@ def test_discover_sub_agent_warns_when_deployed_in_cloud_without_config(monkeypa
     ]:
         monkeypatch.delenv(var, raising=False)
 
-    monkeypatch.setenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", "orchestrator-engine-123")
+def test_discover_sub_agent_cater_agent_engine_id(monkeypatch) -> None:
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT_ID", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.setenv("CATER_AGENT_ENGINE_ID", "555444333")
 
-    with caplog.at_level(logging.WARNING):
-        agent = discover_sub_agent(
-            agent_name="strategy_agent",
-            default_local_url="http://localhost:8081/a2a/app/.well-known/agent-card.json",
-            description="Strategy analyst",
-        )
+    agent = discover_sub_agent(
+        agent_name="cater_agent",
+        default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+        description="Catering agent",
+    )
 
-    assert agent._agent_card_source == "http://localhost:8081/a2a/app/.well-known/agent-card.json"
-    assert "Running in Agent Runtime cloud container" in caplog.text
+    assert "reasoningEngines/555444333" in str(agent._agent_card_source)
+
+
+def test_discover_sub_agent_cater_agent_url(monkeypatch) -> None:
+    custom_url = "https://cater-service.run.app/a2a/app/.well-known/agent-card.json"
+    monkeypatch.delenv("CATER_AGENT_ENGINE_ID", raising=False)
+    monkeypatch.delenv("CATERING_AGENT_ENGINE_ID", raising=False)
+    monkeypatch.setenv("CATER_AGENT_URL", custom_url)
+
+    agent = discover_sub_agent(
+        agent_name="cater_agent",
+        default_local_url="http://localhost:8083/a2a/app/.well-known/agent-card.json",
+        description="Catering agent",
+    )
+
+    assert agent._agent_card_source == custom_url

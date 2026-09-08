@@ -6,7 +6,7 @@ It coordinates strategy-aligned team lunch meetings by orchestrating specialized
 - 👑 **Luncher Orchestrator** (`luncher_agent`): The primary user-facing frontend agent that delegates tasks to the Strategy and Scheduling agents and synthesizes cohesive recommendations.
 - 🎯 **Strategy Agent** (`strat_agent`): Analyzes corporate strategy documents and product launch roadmaps.
 - 📅 **Scheduling Agent** (`sched_agent`): Coordinates team member availability, calendars, and bookings.
-- 🥪 [UNIMPLEMENTED] **Catering Agent** (`cater_agent`): Connects to catering menu service to suggest food for meetings.
+- 🥪 **Catering Agent** (`cater_agent`): Provides catering menu options to serve at lunch meetings by proposing 3 distinct menus composed of items from the company's in-house catering service.
 ---
 
 ## 💻 Reading This Guide in VS Code

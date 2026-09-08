@@ -27,19 +27,118 @@ def get_team_members() -> list[dict]:
         return []
 
 
-async def book_meeting(time_slot: str, reason: str = "") -> str:
+import re
+from typing import Any
+
+VALID_MENUS: dict[str, dict[str, Any]] = {
+    "menu_1": {
+        "menu_id": "menu_1",
+        "name": "Buffalo Chicken Wrap",
+        "items": [
+            "buffalo chicken wrap",
+            "mixed greens salad",
+            "chocolate cookie",
+            "assorted sodas",
+        ],
+    },
+    "menu_2": {
+        "menu_id": "menu_2",
+        "name": "Veggie Tacos",
+        "items": [
+            "veggie tacos",
+            "snow pea salad",
+            "apple tartlets",
+            "tea service",
+        ],
+    },
+    "menu_3": {
+        "menu_id": "menu_3",
+        "name": "Lamb Vindaloo",
+        "items": [
+            "lamb vindaloo",
+            "spiced cauliflower",
+            "naan",
+            "orange-mint spa water",
+        ],
+    },
+}
+
+
+def resolve_menu(menu_selection: str | None) -> tuple[dict[str, Any] | None, bool, str | None]:
+    """Resolves menu selection string into a valid catering menu dict.
+
+    Returns: (menu_dict, is_default, error_message)
+    """
+    if not menu_selection or not str(menu_selection).strip():
+        return VALID_MENUS["menu_1"], True, None
+
+    s = str(menu_selection).lower().strip()
+
+    # Check for invalid numbered menus like menu 4, option 4, etc.
+    invalid_match = re.search(r"\b(?:menu|option)\s*([4-9]|\d{2,})\b", s)
+    if invalid_match:
+        return None, False, f"Menu {invalid_match.group(1)} is not a valid menu option. Please choose between Menu 1 (Buffalo Chicken Wrap), Menu 2 (Veggie Tacos), or Menu 3 (Lamb Vindaloo)."
+
+    if any(k in s for k in ["menu_1", "menu 1", "option 1", "buffalo", "wrap"]) or s == "1":
+        return VALID_MENUS["menu_1"], False, None
+    if any(k in s for k in ["menu_2", "menu 2", "option 2", "veggie", "taco"]) or s == "2":
+        return VALID_MENUS["menu_2"], False, None
+    if any(k in s for k in ["menu_3", "menu 3", "option 3", "lamb", "vindaloo"]) or s == "3":
+        return VALID_MENUS["menu_3"], False, None
+
+    return None, False, f"Menu selection '{menu_selection}' is not a valid menu option. Please choose between Menu 1 (Buffalo Chicken Wrap), Menu 2 (Veggie Tacos), or Menu 3 (Lamb Vindaloo)."
+
+
+async def book_meeting(
+    time_slot: str,
+    reason: str = "",
+    catering_menu: str | None = None,
+    organizer_id: str = "organizer",
+    user_id: str = "user",
+) -> str:
     """Records a confirmed meeting in the shared team bookings.
 
     Args:
-        time_slot: The day and time range of the confirmed meeting, e.g., "Monday 10:00-11:00".
+        time_slot: The day and time range of the confirmed meeting, e.g., "Tuesday 12:00-13:00".
         reason: Optional brief reason/summary for selecting this choice.
+        catering_menu: Optional catering menu choice (e.g. 'Menu 2', 'menu_1', 'Veggie Tacos').
+            Defaults to Menu Option 1 (Buffalo Chicken Wrap) if omitted.
+        organizer_id: Identifier of the organizer booking the meeting.
+        user_id: Authenticated user identifier executing the booking.
     """
-    print(f"[Scheduling Agent] Finalizing booking: {time_slot}...")
+    print(f"[Scheduling Agent] Finalizing booking: {time_slot} (catering: {catering_menu})...")
+    # Check if catering menu choice was embedded in reason or time_slot if omitted
+    if not catering_menu:
+        for source_text in [reason, time_slot]:
+            if "menu " in source_text.lower() or "option " in source_text.lower():
+                m = re.search(r"\b(?:menu|option)\s*([1-9]\d*)\b", source_text, re.IGNORECASE)
+                if m:
+                    catering_menu = m.group(0)
+                    break
+
+    resolved_menu, is_default, err = resolve_menu(catering_menu)
+    if err:
+        return f"Booking rejected: {err}"
+
+    members = get_team_members()
+    attendees_str = ", ".join(m["name"] for m in members) if members else "Team"
+
     try:
-        booking = await bookings.add_booking(time_slot, reason)
+        booking = await bookings.add_booking(
+            time_slot=time_slot,
+            reason=reason,
+            organizer_id=organizer_id,
+            user_id=user_id,
+            catering_menu=resolved_menu,
+        )
+        default_note = " (selected by default)" if is_default else ""
+        menu_num = resolved_menu['menu_id'].split('_')[-1]
         return (
-            f"Successfully booked! Meeting scheduled for {time_slot}. "
-            f"Booking ID: {booking['booking_id']}."
+            f"Successfully booked! Meeting scheduled for {time_slot}.\n"
+            f"- Booking ID: {booking['booking_id']}\n"
+            f"- Attendees: {attendees_str}\n"
+            f"- Catering Menu: {resolved_menu['name']} (Menu {menu_num}){default_note}\n"
+            f"- Items: {', '.join(resolved_menu['items'])}"
         )
     except Exception as e:
         return f"Failed to book meeting: {str(e)}"
@@ -59,6 +158,7 @@ async def get_bookings() -> str:
         lines = [
             f"- {b['time_slot']}"
             + (f" ({b['reason']})" if b.get("reason") else "")
+            + (f" [Catering: {b['catering_menu']['name']}]" if b.get("catering_menu") else "")
             + f" (booking {b['booking_id']})"
             for b in existing
         ]
