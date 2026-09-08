@@ -28,28 +28,63 @@ from google.adk.tools import FunctionTool, ToolContext
 
 ROLE_DESCRIPTION = (
     "You are the central Luncher Synthesizer Agent. You receive context containing "
-    "strategic corporate priorities and team schedule options.\n\n"
+    "strategic corporate priorities, team schedule options, and catering menu choices.\n\n"
     "Synthesize them into a single structured team lunch proposal and call the "
     "`format_lunch_proposal` tool to produce the final response. Frame the lunch "
     "around the strategic objective it serves, include every team member by name, "
-    "and carry across who cannot attend each slot exactly as the scheduling agent reported it.\n\n"
-    "BOOKING TURNS. When the user confirms or requests to book a specific slot (e.g., 'Book Tuesday 12:00' "
+    "carry across who cannot attend each slot exactly as the scheduling agent reported it, "
+    "and present the 3 catering menu options categorized by courses (Main, Side, Dessert, Beverage).\n\n"
+    "BOOKING TURNS. When the user confirms or requests to book a specific slot (e.g., 'Book Tuesday 12:00 with Menu 2' "
     "or 'Option 1 works'), do not call `format_lunch_proposal`. Reply with a concise confirmation "
     "of at most four bullets:\n"
     "* **Time Slot**: [selected slot]\n"
     "* **Attendees**: [list of attendees]\n"
     "* **Booking ID**: [booking id or 'Confirmed']\n"
-    "* **Food Reminder**: You might want to order some food for this meeting.\n\n"
+    "* **Catering Menu**: [selected catering menu details]\n\n"
     "Say each fact once. No extra recap or pleasantries."
 )
 
 SCHEDULING_AGENT_NAME = "scheduling_agent"
+CATERING_AGENT_NAMES = {"cater_agent", "catering_agent"}
 
 # The roster line the scheduling agent opens its shortlist with,
 # e.g. "Team (8): Liam, Diego, Dan, ...".
 _ROSTER_LINE = re.compile(
     r"Team\s*\**\s*\(\s*(\d+)\s*\)\s*\**\s*:\s*(.+)", re.IGNORECASE
 )
+
+DEFAULT_CATERING_MENUS: list[dict[str, Any]] = [
+    {
+        "menu_id": "menu_1",
+        "name": "Buffalo Chicken Wrap",
+        "items": [
+            "buffalo chicken wrap",
+            "mixed greens salad",
+            "chocolate cookie",
+            "assorted sodas",
+        ],
+    },
+    {
+        "menu_id": "menu_2",
+        "name": "Veggie Tacos",
+        "items": [
+            "veggie tacos",
+            "snow pea salad",
+            "apple tartlets",
+            "tea service",
+        ],
+    },
+    {
+        "menu_id": "menu_3",
+        "name": "Lamb Vindaloo",
+        "items": [
+            "lamb vindaloo",
+            "spiced cauliflower",
+            "naan",
+            "orange-mint spa water",
+        ],
+    },
+]
 
 
 def _split_names(text: str) -> list[str]:
@@ -95,10 +130,58 @@ def _scheduling_agent_text(tool_context: ToolContext) -> str:
     return "\n".join(chunks)
 
 
+def _cater_agent_text(tool_context: ToolContext) -> str:
+    """Concatenates what the catering agent said during this invocation."""
+    session = getattr(tool_context, "session", None)
+    if session is None:
+        return ""
+
+    chunks: list[str] = []
+    for event in getattr(session, "events", []) or []:
+        if getattr(event, "author", None) not in CATERING_AGENT_NAMES:
+            continue
+        tool_inv_id = getattr(tool_context, "invocation_id", None)
+        event_inv_id = getattr(event, "invocation_id", None)
+        if tool_inv_id and event_inv_id and event_inv_id != tool_inv_id:
+            continue
+        for part in getattr(getattr(event, "content", None), "parts", None) or []:
+            if getattr(part, "text", None):
+                chunks.append(part.text)
+        if getattr(event, "output", None) and isinstance(event.output, str):
+            chunks.append(event.output)
+    return "\n".join(chunks)
+
+
 def _unsupported_attendees(attendees: list[str], roster_text: str) -> list[str]:
     """Returns the attendees the scheduling agent never mentioned."""
     haystack = roster_text.casefold()
     return [name for name in attendees if name.casefold() not in haystack]
+
+
+def format_catering_menu_section(
+    menus: list[dict] | None = None,
+    unavailable: bool = False,
+) -> str:
+    """Formats the catering menus section with categorized courses."""
+    if unavailable:
+        return "### Catering Menu Options\n*Catering menu suggestions are temporarily unavailable.*"
+
+    if not menus:
+        menus = DEFAULT_CATERING_MENUS
+
+    course_labels = ["Main", "Side", "Dessert", "Beverage"]
+    sections = ["### Catering Menu Options"]
+    for idx, m in enumerate(menus, 1):
+        name = m.get("name", f"Menu {idx}")
+        items = m.get("items", [])
+        item_lines = []
+        for c_idx, item in enumerate(items):
+            course_label = course_labels[c_idx] if c_idx < len(course_labels) else f"Course {c_idx+1}"
+            item_lines.append(f"   * *{course_label}*: {item}")
+        items_str = "\n".join(item_lines) if item_lines else "   * *Items*: Standard menu items"
+        sections.append(f"{idx}. **Menu {idx}: {name}**\n{items_str}")
+
+    return "\n\n".join(sections)
 
 
 def build_lunch_proposal_markdown(
@@ -108,6 +191,8 @@ def build_lunch_proposal_markdown(
     attendees: list[str],
     time_slots: list[dict],
     recommended_slot: str,
+    catering_menus: list[dict] | None = None,
+    catering_unavailable: bool = False,
 ) -> str:
     """Builds the structured Markdown text for a lunch proposal."""
     if not time_slots:
@@ -129,6 +214,7 @@ def build_lunch_proposal_markdown(
 
     slots_section = "\n".join(slots_formatted)
     attendees_str = ", ".join(attendees)
+    catering_section = format_catering_menu_section(catering_menus, catering_unavailable)
 
     return (
         f"# {title}\n\n"
@@ -137,9 +223,9 @@ def build_lunch_proposal_markdown(
         f"{attendees_str}\n\n"
         f"### Proposed Time Slots\n"
         f"{slots_section}\n\n"
-        f"You might want to order some food for this meeting.\n\n"
+        f"{catering_section}\n\n"
         f"---\n"
-        f"*To confirm, reply with your preferred time slot (e.g., \"Book {time_slots[0]['label']}\").*"
+        f"*To confirm, reply with your preferred time slot and catering menu (e.g., \"Book {time_slots[0]['label']} with Menu 2\" or \"Book Slot 1\").*"
     )
 
 
@@ -234,6 +320,11 @@ def format_lunch_proposal(
                     f"({', '.join(roster)})"
                 )
 
+        cater_text = _cater_agent_text(tool_context)
+        catering_unavailable = False
+        if cater_text and ("error" in cater_text.lower() or "failed" in cater_text.lower() or "timeout" in cater_text.lower()):
+            catering_unavailable = True
+
         markdown = build_lunch_proposal_markdown(
             title=title,
             rationale=rationale,
@@ -243,6 +334,8 @@ def format_lunch_proposal(
                 for label, value, absent in zip(slot_labels, slot_values, slot_absentees)
             ],
             recommended_slot=recommended_slot,
+            catering_menus=DEFAULT_CATERING_MENUS,
+            catering_unavailable=catering_unavailable,
         )
         return markdown
     except (ValueError, KeyError, TypeError) as error:

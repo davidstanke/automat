@@ -70,8 +70,29 @@ def test_build_lunch_proposal_markdown_basic() -> None:
     assert "*Absences*: Everyone can attend" in markdown
     assert "2. **Wed 13 Aug, 12:30-13:30 (7 of 8 free)**" in markdown
     assert "*Absences*: Kai" in markdown
-    assert "You might want to order some food for this meeting." in markdown
-    assert "*To confirm, reply with your preferred time slot" in markdown
+    assert "### Catering Menu Options" in markdown
+    assert "Menu 1: Buffalo Chicken Wrap" in markdown
+    assert "*Main*: buffalo chicken wrap" in markdown
+    assert "*Side*: mixed greens salad" in markdown
+    assert "*Dessert*: chocolate cookie" in markdown
+    assert "*Beverage*: assorted sodas" in markdown
+    assert "Menu 2: Veggie Tacos" in markdown
+    assert "Menu 3: Lamb Vindaloo" in markdown
+    assert "*To confirm, reply with your preferred time slot and catering menu" in markdown
+
+
+def test_build_lunch_proposal_markdown_catering_unavailable() -> None:
+    slots = [{"label": SAMPLE_LABELS[0], "value": SAMPLE_VALUES[0], "absent": ""}]
+    markdown = build_lunch_proposal_markdown(
+        title="OmniChef Launch Lunch",
+        rationale="Aligns cross-functional team on Q4 launch goals.",
+        attendees=SAMPLE_ROSTER,
+        time_slots=slots,
+        recommended_slot="2026-08-12T12:00",
+        catering_unavailable=True,
+    )
+    assert "### Catering Menu Options" in markdown
+    assert "*Catering menu suggestions are temporarily unavailable.*" in markdown
 
 
 def test_build_lunch_proposal_markdown_validation_errors() -> None:

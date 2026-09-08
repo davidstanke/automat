@@ -108,13 +108,35 @@ def test_read_is_scope_keyed_with_an_explicit_page_size(fake: _FakeMemories) -> 
 
 
 def test_round_trip_preserves_fields(fake: _FakeMemories) -> None:
-    asyncio.run(bookings.add_booking("Friday 12:00-13:00", "Team lunch"))
+    asyncio.run(bookings.add_booking("Friday 12:00-13:00", "Team lunch", organizer_id="org1", user_id="u1"))
     listed = asyncio.run(bookings.list_bookings())
 
     assert len(listed) == 1
     assert listed[0]["time_slot"] == "Friday 12:00-13:00"
     assert listed[0]["reason"] == "Team lunch"
+    assert listed[0]["organizer_id"] == "org1"
+    assert listed[0]["user_id"] == "u1"
     assert listed[0]["booking_id"].startswith("bk_")
+    assert listed[0]["catering_menu"]["menu_id"] == "menu_1"
+    assert listed[0]["catering_menu"]["name"] == "Buffalo Chicken Wrap"
+
+
+def test_round_trip_preserves_custom_catering_menu(fake: _FakeMemories) -> None:
+    custom_menu = {
+        "menu_id": "menu_2",
+        "name": "Veggie Tacos",
+        "items": ["veggie tacos", "snow pea salad", "apple tartlets", "tea service"],
+    }
+    asyncio.run(
+        bookings.add_booking(
+            "Tuesday 12:00-13:00",
+            "Veggie Lunch",
+            catering_menu=custom_menu,
+        )
+    )
+    listed = asyncio.run(bookings.list_bookings())
+    assert len(listed) == 1
+    assert listed[0]["catering_menu"] == custom_menu
 
 
 def test_reads_every_page_not_just_the_first(fake: _FakeMemories) -> None:

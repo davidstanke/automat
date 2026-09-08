@@ -38,6 +38,26 @@ def test_book_meeting() -> None:
     res = asyncio.run(book_meeting("Monday 10:00-11:00 AM", "Test booking"))
     assert "Successfully booked!" in res
     assert "bk_" in res
+    assert "Buffalo Chicken Wrap" in res
+    assert "(selected by default)" in res
+
+
+def test_book_meeting_with_explicit_menu() -> None:
+    res = asyncio.run(book_meeting("Tuesday 12:00-13:00", "Team lunch", catering_menu="Menu 2"))
+    assert "Successfully booked!" in res
+    assert "bk_" in res
+    assert "Veggie Tacos" in res
+    assert "Menu 2" in res
+    assert "veggie tacos, snow pea salad" in res
+
+
+def test_book_meeting_rejects_invalid_menu() -> None:
+    res = asyncio.run(book_meeting("Tuesday 12:00-13:00", "Team lunch", catering_menu="Menu 4"))
+    assert "Booking rejected:" in res
+    assert "Menu 4 is not a valid menu option" in res
+    # Ensure nothing was booked
+    listed = asyncio.run(bookings.list_bookings())
+    assert len(listed) == 0
 
 
 def test_get_bookings_empty() -> None:
